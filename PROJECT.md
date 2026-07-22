@@ -13,7 +13,20 @@ Read this first every session ("start day" ritual). Full plan:
 | 0.4 Edge cases researched → `rules/DECISIONS.md` (D1 calendar days, D2 NEFT deferred, D3 PPI off-us inherits rail, D4 floor-not-ceiling) | ✅ 2026-07-22 |
 | 1.1 Canonical transaction schema (`refundradar/model.py`) + channel-detection heuristics from narration text | ✅ 2026-07-22 |
 | 1.2 Synthetic statement generator (`refundradar/synth.py` → `samples/`) with 4 planted failures + 1 false-positive trap, answer key from the rules engine | ✅ 2026-07-23 |
-| 1.3 First real parser: one bank's CSV export → canonical schema | ⬜ |
+| 1.3 Parser: generic CSV → canonical schema (`refundradar/parser.py`) | ✅ 2026-07-23 |
+| 2. Reconciliation engine (`refundradar/reconcile.py`) — passes the planted exam: finds all incidents, dodges the merchant-refund trap | ✅ 2026-07-23 |
+| 3. Audit aggregation (`refundradar/audit.py`) — totals, per-incident rulings | ✅ 2026-07-23 |
+| 4. Complaint pack generator (`refundradar/complaint.py`) — bank letter + evidence table + ombudsman draft | ✅ 2026-07-23 |
+| 5. Web app (`refundradar/webapp.py` + `static/index.html`) — drop zone, demo mode, audit screen, confirm flow, complaint download; verified live in browser | ✅ 2026-07-23 |
+| CLI (`python -m refundradar serve|audit|demo`) | ✅ 2026-07-23 |
+
+## Roadmap to v1.0 (remaining)
+
+- Real bank formats: HDFC/SBI/ICICI/Kotak CSV exports (each is one small reader)
+- PDF statement support (pdfplumber)
+- Per-bank grievance-cell addresses in the letter
+- "How do I get my statement?" helper with per-bank screenshots (UX-SPEC screen 1)
+- Field-test on real family statements → accuracy notes
 
 ## Next phases (see plan for detail)
 

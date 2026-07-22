@@ -63,3 +63,24 @@ the bank. A disputed ₹500 claim is worth less than an undisputable ₹300 one.
 **Risk:** Some genuine P2P transfers (name-based VPAs like `ramesh@okhdfc`) get the
 T+5 deadline and under-claim by up to 4 days × ₹100. Acceptable; revisit if Phase 2
 reconciliation finds counterparty signals that raise confidence.
+
+## D6 — Never-reversed failures require user confirmation (2026-07-23)
+
+**Decision:** the reconciler never flags a debit as "failed, never refunded" on its
+own. A failed payment that was never reversed is statistically identical, on the
+statement, to a successful payment. Claiming one without evidence would be a guess
+dressed as an audit. The UI therefore asks the user to search and confirm the
+payment they know failed; only confirmed refs enter the claim.
+
+**Why:** every claim in the complaint letter must survive the bank's scrutiny. One
+fabricated incident poisons the credibility of all the real ones.
+
+## D7 — v1 UI is a single vanilla-JS page, not React (2026-07-23)
+
+**Decision:** the web app is one HTML file served by FastAPI; the browser holds the
+statement text and re-sends it per request, so the server is stateless and stores
+nothing (privacy by architecture).
+
+**Why:** no build step, no node toolchain, nothing to break — the whole UI is
+readable in one sitting, which fits both the trust story and a solo maintainer.
+React remains the right call if/when the UI outgrows one screen.

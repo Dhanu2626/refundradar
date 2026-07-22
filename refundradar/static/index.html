@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RefundRadar</title>
+<style>
+  :root {
+    --bg: #f7f6f3; --card: #ffffff; --ink: #1a1a18; --muted: #6b6a64;
+    --line: #e4e2db; --red-bg: #fceaea; --red: #a32d2d; --red-dark: #791f1f;
+    --amber-bg: #faeeda; --amber: #854f0b; --green-bg: #eaf3de; --green: #3b6d11;
+    --accent: #185fa5; --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg);
+         color: var(--ink); line-height: 1.55; padding: 24px 16px 60px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
+  .brand { font-size: 22px; font-weight: 600; }
+  .brand span { color: var(--accent); }
+  .lock { font-size: 13px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .drop { border: 2px dashed var(--line); border-radius: var(--radius);
+          padding: 36px 20px; text-align: center; cursor: pointer;
+          transition: border-color .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); }
+  .drop p { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  button { font: inherit; border: 1px solid var(--line); background: #fff;
+           border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--accent); border-color: var(--accent);
+                   color: #fff; }
+  button.primary:hover { opacity: .92; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+           gap: 12px; margin: 14px 0; }
+  .stat { border-radius: var(--radius); padding: 14px 16px; background: var(--bg); }
+  .stat .label { font-size: 13px; color: var(--muted); }
+  .stat .value { font-size: 26px; font-weight: 600; }
+  .stat.owed { background: var(--red-bg); }
+  .stat.owed .label { color: var(--red); }
+  .stat.owed .value { color: var(--red-dark); }
+  .inc { display: flex; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--line);
+         align-items: center; flex-wrap: wrap; }
+  .inc .main { flex: 1; min-width: 220px; }
+  .inc .title { font-size: 15px; }
+  .inc .sub { font-size: 13px; color: var(--muted); }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px;
+           white-space: nowrap; }
+  .badge.late { background: var(--red-bg); color: var(--red); }
+  .badge.never { background: var(--amber-bg); color: var(--amber); }
+  .badge.ok { background: var(--green-bg); color: var(--green); }
+  .badge.info { background: var(--bg); color: var(--muted); }
+  h2 { font-size: 17px; margin: 18px 0 4px; }
+  .hint { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  input[type=text], input[type=email] { font: inherit; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+           gap: 10px; margin: 10px 0; }
+  pre.pack { white-space: pre-wrap; background: var(--bg); border-radius: var(--radius);
+             padding: 16px; font-size: 13px; max-height: 420px; overflow: auto; }
+  .error { background: var(--red-bg); color: var(--red-dark); padding: 10px 14px;
+           border-radius: 8px; margin-bottom: 12px; display: none; }
+  .hidden { display: none; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Refund<span>Radar</span></div>
+    <div class="lock">&#128274; No login. No signup. Your statement never leaves this computer.</div>
+  </header>
+
+  <div class="error" id="error"></div>
+
+  <div class="card" id="screen-drop">
+    <div class="drop" id="drop">
+      <strong>Drop your bank statement here</strong> or click to choose a file
+      <p>CSV export with columns: Date, Narration, Ref, Debit, Credit, Balance</p>
+      <input type="file" id="file" accept=".csv" style="display:none">
+    </div>
+    <div class="row" style="margin-top: 12px; justify-content: center;">
+      <button id="demo-btn">Try with a demo statement</button>
+    </div>
+  </div>
+
+  <div id="screen-audit" class="hidden">
+    <div class="card">
+      <div class="hint" id="file-info"></div>
+      <div class="cards">
+        <div class="stat owed"><div class="label">Your bank owes you</div>
+          <div class="value" id="owed">&#8377;0</div></div>
+        <div class="stat"><div class="label">Stuck refunds</div>
+          <div class="value" id="stuck">&#8377;0</div></div>
+        <div class="stat"><div class="label">Refunds on time</div>
+          <div class="value" id="ontime">0</div></div>
+      </div>
+      <div id="incidents"></div>
+    </div>
+
+    <div class="card" id="confirm-card">
+      <h2>Did a payment fail that never came back?</h2>
+      <p class="hint">The statement alone can't prove a failure that was never
+        reversed &mdash; a failed payment looks identical to a successful one.
+        Search the payment you remember and confirm it.</p>
+      <input type="text" id="search" placeholder="Search by amount, name, or date (e.g. 2499)">
+      <div id="candidates"></div>
+    </div>
+
+    <div class="card">
+      <h2>Generate the complaint pack</h2>
+      <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
+        citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
+      <div class="grid3">
+        <input type="text" id="c-name" placeholder="Name as on the account">
+        <input type="text" id="c-last4" placeholder="Account last 4 digits" maxlength="4">
+        <input type="text" id="c-contact" placeholder="Email or phone for the reply">
+      </div>
+      <div class="row">
+        <button class="primary" id="pack-btn">Generate complaint pack</button>
+        <button id="download-btn" class="hidden">Download as file</button>
+        <button id="reset-btn">Start over</button>
+      </div>
+      <pre class="pack hidden" id="pack"></pre>
+    </div>
+  </div>
+
+  <footer>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs 100% locally.</footer>
+</div>
+
+<script>
+const state = { csv: null, confirmed: new Set(), fileName: "", packText: "" };
+const $ = (id) => document.getElementById(id);
+const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
+
+function showError(msg) {
+  const e = $("error"); e.textContent = msg; e.style.display = msg ? "block" : "none";
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = "Something went wrong.";
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return res;
+}
+
+async function runAudit() {
+  showError("");
+  try {
+    const res = await api("/api/audit", { csv: state.csv, confirmed: [...state.confirmed] });
+    render(await res.json());
+  } catch (err) { showError(err.message); }
+}
+
+function incidentRow(i) {
+  const when = new Date(i.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  let badge = "", sub = i.reason;
+  if (i.status === "refunded_late") badge = `<span class="badge late">${inr(i.compensation_inr)} owed</span>`;
+  else if (i.status === "never_refunded") badge = `<span class="badge never">${inr(i.compensation_inr)} and counting</span>`;
+  else if (i.status === "refunded_on_time") badge = `<span class="badge ok">On time</span>`;
+  else if (i.status === "excluded_genuine_refund") badge = `<span class="badge info">Genuine refund &mdash; excluded</span>`;
+  else if (i.status === "needs_confirmation")
+    badge = `<button data-ref="${i.ref}" class="confirm-yes">Yes, it failed</button>`;
+  else badge = `<span class="badge info">Outside 2019 circular</span>`;
+  const name = (i.channel_name || i.channel || "payment");
+  return `<div class="inc"><div class="main">
+      <div class="title">${name} &middot; ${inr(i.amount)} &middot; ${when}</div>
+      <div class="sub">${sub}</div></div>${badge}</div>`;
+}
+
+function render(data) {
+  const a = data.audit;
+  state.candidates = data.candidates;
+  $("screen-drop").classList.add("hidden");
+  $("screen-audit").classList.remove("hidden");
+  $("file-info").innerHTML =
+    `&#128196; ${state.fileName} &middot; ${a.statement_lines} lines read &middot; ` +
+    `${a.incidents.length} findings &middot; audited as of ${a.as_of}`;
+  $("owed").textContent = inr(a.total_owed_inr);
+  $("stuck").textContent = inr(a.stuck_amount);
+  $("ontime").textContent = a.on_time_count;
+  const order = { refunded_late: 0, never_refunded: 1, needs_confirmation: 2,
+                  refunded_on_time: 3, excluded_genuine_refund: 4, unsupported_channel: 5 };
+  const sorted = [...a.incidents].sort((x, y) => order[x.status] - order[y.status]);
+  $("incidents").innerHTML = sorted.map(incidentRow).join("") ||
+    `<p class="hint">No refund-related findings in this statement.</p>`;
+  document.querySelectorAll(".confirm-yes").forEach((b) =>
+    b.addEventListener("click", () => { state.confirmed.add(b.dataset.ref); runAudit(); }));
+  renderCandidates("");
+}
+
+function renderCandidates(q) {
+  const list = (state.candidates || [])
+    .filter((c) => !state.confirmed.has(c.ref))
+    .filter((c) => !q || c.narration.toLowerCase().includes(q) ||
+                   c.amount.includes(q) || c.date.includes(q))
+    .slice(0, 8);
+  $("candidates").innerHTML = list.map((c) => {
+    const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    return `<div class="inc"><div class="main">
+        <div class="title">${inr(c.amount)} &middot; ${when}</div>
+        <div class="sub">${c.narration}</div></div>
+        <button data-ref="${c.ref}" class="mark-failed">This payment failed</button></div>`;
+  }).join("") || `<p class="hint" style="margin-top:8px">Type to search your payments.</p>`;
+  document.querySelectorAll(".mark-failed").forEach((b) =>
+    b.addEventListener("click", () => { state.confirmed.add(b.dataset.ref); runAudit(); }));
+}
+
+$("search").addEventListener("input", (e) => renderCandidates(e.target.value.toLowerCase()));
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+$("drop").addEventListener("dragleave", () => $("drop").classList.remove("over"));
+$("drop").addEventListener("drop", (e) => {
+  e.preventDefault(); $("drop").classList.remove("over");
+  if (e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+});
+$("file").addEventListener("change", (e) => { if (e.target.files.length) readFile(e.target.files[0]); });
+
+function readFile(f) {
+  const reader = new FileReader();
+  reader.onload = () => { state.csv = reader.result; state.fileName = f.name;
+                          state.confirmed = new Set(); runAudit(); };
+  reader.readAsText(f);
+}
+
+$("demo-btn").addEventListener("click", async () => {
+  showError("");
+  try {
+    const data = await (await api("/api/demo")).json();
+    state.csv = data.csv; state.fileName = "demo_statement.csv (synthetic)";
+    state.confirmed = new Set(data.suggested_confirmed);
+    runAudit();
+  } catch (err) { showError(err.message); }
+});
+
+$("pack-btn").addEventListener("click", async () => {
+  showError("");
+  const name = $("c-name").value.trim(), last4 = $("c-last4").value.trim(),
+        contact = $("c-contact").value.trim();
+  if (!name || !last4 || !contact) { showError("Fill the three details for the letter first."); return; }
+  try {
+    const res = await api("/api/complaint", {
+      csv: state.csv, confirmed: [...state.confirmed],
+      name, account_last4: last4, contact,
+    });
+    state.packText = await res.text();
+    $("pack").textContent = state.packText;
+    $("pack").classList.remove("hidden");
+    $("download-btn").classList.remove("hidden");
+  } catch (err) { showError(err.message); }
+});
+
+$("download-btn").addEventListener("click", () => {
+  const blob = new Blob([state.packText], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "refundradar_complaint_pack.md";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+$("reset-btn").addEventListener("click", () => location.reload());
+</script>
+</body>
+</html>

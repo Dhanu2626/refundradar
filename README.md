@@ -35,16 +35,27 @@ can't leak anything. The consent-based "connect your bank" future (RBI's Account
 Aggregator rail) is documented as the v2 ambition in [UX-SPEC.md](UX-SPEC.md) —
 the canonical schema means an AA feed would plug in as just another parser.
 
-## Status
-
-🚧 Phase 1 — teaching the engine to read bank statements. Phase 0 (the RBI
-rulebook as tested code) is done — see [PROJECT.md](PROJECT.md) and
-[rules/DECISIONS.md](rules/DECISIONS.md).
-
-## Run the tests
+## Run it
 
 ```
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m refundradar serve
+```
+
+Then open **http://127.0.0.1:8626**, click **"Try with a demo statement"**, and
+watch it find ₹5,100 the demo customer's bank owes them. Or stay in the terminal:
+
+```
+.venv\Scripts\python -m refundradar demo
 .venv\Scripts\python -m pytest -q
 ```
+
+## Status
+
+✅ **Feature-complete beta (v0.9)** — the full journey works end to end on the
+generic CSV format: parse → reconcile → audit → complaint pack, in the browser
+and the CLI, with 52 tests including a planted-ground-truth exam the reconciler
+must pass (find every failure, fall for no traps). Remaining for v1.0: real
+bank export formats, PDF statements, per-bank letter addresses — see
+[PROJECT.md](PROJECT.md) and [rules/DECISIONS.md](rules/DECISIONS.md).

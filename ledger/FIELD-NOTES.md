@@ -90,3 +90,30 @@ graded as precision and recall — because 'it seems to work' is not a metric."
 
 **Next session:** slice 1.3 — the first real parser: read the generic CSV format
 into canonical Transactions, and the engine reads its first full statement.
+
+## Day 5 — 2026-07-23 · The full build: parser → detective → audit → letter → app
+
+🏦 **Payments/RegTech insight:** the deepest finding of the build — a failed payment
+that was never reversed is INVISIBLE in a statement; it looks exactly like a
+successful payment. Only reversed failures leave a two-row trace. So the audit
+architecture must split into "what the statement proves" (automated) and "what only
+the customer knows" (confirmed via UI, D6) — and a legal letter may contain only
+the union of proof and confirmation, never guesses. One fabricated incident would
+poison the credibility of every real one.
+
+🔧 **Engineering insight:** the server holds NO state — the browser keeps the
+statement text and re-sends it with each request. That single choice makes the
+privacy promise structural (nothing to store = nothing to leak), makes the API
+trivially testable, and eliminated a whole class of session bugs. Also: the
+reconciler shipped only after passing a pre-built exam (planted ground truth,
+100% precision/recall including the trap) — test-first pays off most at the
+riskiest layer.
+
+🎯 **Interview line:** "My reconciler couldn't ship until it passed an exam I built
+first: synthetic statements with planted failures and a merchant-refund trap.
+It scores 100% precision and recall on ground truth — and the never-reversed case
+taught me that some fraud/ops signals structurally cannot come from data alone;
+you have to design the human confirmation into the product."
+
+**Next:** real bank CSV formats (HDFC/SBI/ICICI), PDF statements, field test on
+family statements. The engine is done; v1.0 is about meeting real data.
