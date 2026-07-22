@@ -47,3 +47,19 @@ shall apply." Encoding a duplicate channel would just drift from the underlying 
 more under their board-approved customer compensation policies; they cannot pay less
 than the framework. Audit reports state compensation as "minimum owed under
 RBI/2019-20/67" — deliberately conservative, harder to dispute.
+
+## D5 — Ambiguous UPI transactions default to P2M, the longer deadline (2026-07-22)
+
+**Decision:** `detect_channel()` classifies a UPI narration as `upi_p2p` (T+1) only on
+clear person-side evidence — a phone-number VPA (`9876543210@...`) or a literal P2P
+tag. Merchant markers (QR, gateway VPAs like Razorpay/BharatPe/PayU) and everything
+ambiguous become `upi_p2m` (T+5).
+
+**Why:** Statement narrations don't label the counterparty type, and guessing P2P
+inflates the claim (shorter deadline → more days late → more compensation). Per D4 we
+compute the minimum defensible amount: when unsure, assume the deadline that favors
+the bank. A disputed ₹500 claim is worth less than an undisputable ₹300 one.
+
+**Risk:** Some genuine P2P transfers (name-based VPAs like `ramesh@okhdfc`) get the
+T+5 deadline and under-claim by up to 4 days × ₹100. Acceptable; revisit if Phase 2
+reconciliation finds counterparty signals that raise confidence.

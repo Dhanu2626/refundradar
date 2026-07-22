@@ -29,3 +29,13 @@
   (on-us) or cross to another via a rail like UPI/card network (off-us).
 - **Decision log / ADR** — a file recording each judgment call with reasoning and
   residual risk; standard practice in regulated software (see rules/DECISIONS.md).
+- **Narration** — the free-text description on a statement line
+  (`UPI/DR/519912345678/...`); every bank writes it in its own dialect.
+- **VPA (Virtual Payment Address)** — a UPI handle like `name@okhdfc`; phone-number
+  VPAs signal a person, QR/gateway VPAs signal a merchant.
+- **RRN (Retrieval Reference Number)** — 12-digit reference on UPI/IMPS/card
+  transactions; our primary key for matching a debit to its refund.
+- **Canonical schema** — one standard internal format all inputs are converted to,
+  so downstream code never deals with per-bank differences.
+- **Decimal vs float** — money math must use exact decimal arithmetic; binary
+  floats can't represent 0.1 and drift by paise.

@@ -43,3 +43,26 @@ it, and the residual risk in a decision log, the way a compliance function would
 
 **Next session (Phase 1):** canonical transaction schema + channel detection from
 narration strings — the first step of teaching the tool to read real statements.
+
+## Day 3 — 2026-07-22 · Slice 1.1: the canonical schema
+
+🏦 **Payments/RegTech insight:** a bank statement's narration line is a dialect, not
+a standard — `UPI/DR/519912345678/...`, `ATW-...`, `ACH-DR-...` — and the SAME
+transaction type is written differently by every bank. Worse, the narration doesn't
+tell you the counterparty type: whether a UPI payment went to a person (T+1 refund
+deadline) or a merchant (T+5) must be inferred. We infer conservatively (D5): when
+unsure, assume the deadline that favors the bank, so every rupee we claim survives
+scrutiny. Under-claiming slightly beats over-claiming and being dismissed.
+
+🔧 **Engineering insight:** two traps caught today. (1) "PAYTM" contains the letters
+"ATM" — naive substring matching would classify a lunch payment as an ATM withdrawal;
+regex word boundaries (\bATM\b) are load-bearing. (2) Money must be Decimal, never
+float: 0.1 + 0.2 != 0.3 in binary floating point, and a compensation auditor that's
+off by a paisa loses all credibility. `Decimal(str(x))` at the door, everywhere.
+
+🎯 **Interview line:** "I designed a canonical schema so N bank formats × 1 auditor
+stays N parsers, not N×M format-aware components — every parser normalizes into one
+Transaction model and everything downstream is bank-agnostic."
+
+**Next session:** slice 1.2 — the synthetic statement generator with planted
+failures, our ground truth for measuring reconciliation accuracy in Phase 2.

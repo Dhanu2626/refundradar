@@ -12,3 +12,12 @@
    RBI compensation regimes — flat ₹100/day under the 2019 TAT circular, penal
    interest at repo+2% for NEFT under the 2010 circular, or the underlying rail's
    rule for wallet off-us transactions."
+
+4. (2026-07-22) "Where the data was ambiguous — you can't always tell a UPI merchant
+   payment from a person-to-person one — I chose the conservative reading that
+   produces a smaller but undisputable claim, and documented the trade-off: a
+   disputed ₹500 claim is worth less than an undisputable ₹300 one."
+
+5. (2026-07-22) "I normalized every bank's statement dialect into one canonical
+   transaction schema, so adding a new bank means writing one parser — nothing
+   downstream knows or cares which bank the data came from."
