@@ -28,9 +28,18 @@ Everything runs on your own machine. No signup, no server, no upload.
 Your bank statements never leave your laptop. The repo's `.gitignore` refuses
 real statement files by design; only synthetic demo data is ever committed.
 
+**Data minimisation is deliberate product strategy, not a limitation.** The app
+never asks for a name, DOB, phone number, or login — the statement file already
+contains every transaction the audit needs, and an app that asks for nothing
+can't leak anything. The consent-based "connect your bank" future (RBI's Account
+Aggregator rail) is documented as the v2 ambition in [UX-SPEC.md](UX-SPEC.md) —
+the canonical schema means an AA feed would plug in as just another parser.
+
 ## Status
 
-🚧 Phase 0 — the RBI rulebook encoded as tested code. See [PROJECT.md](PROJECT.md).
+🚧 Phase 1 — teaching the engine to read bank statements. Phase 0 (the RBI
+rulebook as tested code) is done — see [PROJECT.md](PROJECT.md) and
+[rules/DECISIONS.md](rules/DECISIONS.md).
 
 ## Run the tests
 
