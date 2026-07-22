@@ -1,5 +1,7 @@
 # RefundRadar
 
+![tests](https://github.com/Dhanu2626/refundradar/actions/workflows/ci.yml/badge.svg)
+
 **The payments auditor your bank hopes you never run.**
 
 When a digital payment fails in India — money debited, credit never arrives — RBI circular
