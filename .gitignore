@@ -1,0 +1,15 @@
+# Real bank statements must NEVER enter the repo — privacy is the product.
+statements/
+*.pdf
+*.csv
+*.xlsx
+*.xls
+
+# Synthetic/demo data is the only allowed data
+!samples/**
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

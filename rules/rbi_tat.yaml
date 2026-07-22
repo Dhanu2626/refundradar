@@ -1,0 +1,77 @@
+# RBI failed-transaction TAT & compensation rulebook
+#
+# Source: RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20), 20 September 2019
+# "Harmonisation of Turn Around Time (TAT) and customer compensation for
+#  failed transactions using authorised Payment Systems"
+# https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11693
+#
+# Key definitions from the circular:
+#   - T is the day of transaction and refers to the CALENDAR date.
+#   - Compensation must be effected to the customer's account SUO MOTO,
+#     without waiting for a complaint or claim.
+#
+# reversal_deadline_days: N means the bank must complete auto-reversal by T+N.
+# Compensation of `compensation_per_day_inr` accrues per day BEYOND T+N.
+
+compensation_per_day_inr: 100
+
+channels:
+  - code: atm
+    name: ATM / Micro-ATM cash withdrawal
+    scenario: Account debited, cash not dispensed
+    reversal_deadline_days: 5
+
+  - code: card_to_card
+    name: Card-to-card transfer
+    scenario: Card account debited, beneficiary card not credited
+    reversal_deadline_days: 1
+
+  - code: pos
+    name: PoS / card present
+    scenario: Account debited, no confirmation at merchant (charge-slip not generated)
+    reversal_deadline_days: 5
+
+  - code: ecom
+    name: Card not present / e-commerce
+    scenario: Account debited, no confirmation at merchant
+    reversal_deadline_days: 5
+
+  - code: imps
+    name: IMPS
+    scenario: Account debited, beneficiary account not credited
+    reversal_deadline_days: 1
+
+  - code: upi_p2p
+    name: UPI person-to-person
+    scenario: Account debited, beneficiary account not credited
+    reversal_deadline_days: 1
+
+  - code: upi_p2m
+    name: UPI person-to-merchant
+    scenario: Account debited, no confirmation at merchant
+    reversal_deadline_days: 5
+
+  - code: aeps
+    name: AePS (incl. Aadhaar Pay)
+    scenario: Account debited, no confirmation at merchant
+    reversal_deadline_days: 5
+
+  - code: apbs
+    name: Aadhaar Payment Bridge System
+    scenario: Delay in crediting beneficiary account
+    reversal_deadline_days: 1
+
+  - code: nach
+    name: NACH (incl. debit despite revoked mandate)
+    scenario: Delay in credit / reversal, or debit after mandate revoked
+    reversal_deadline_days: 1
+
+  - code: ppi_on_us
+    name: PPI (wallet/card) on-us
+    scenario: Beneficiary not credited / no merchant confirmation
+    reversal_deadline_days: 1
+
+# Not covered by this circular (tracked in rules/DECISIONS.md, slice 0.4):
+#   - NEFT/RTGS: separate RBI procedural guidelines (penal-interest regime,
+#     not the flat ₹100/day) — needs its own rule entry later.
+#   - PPI off-us: to verify against circular annex before encoding.
