@@ -19,3 +19,13 @@
   the same PPI issuer.
 - **RBI Ombudsman (RB-IOS)** — free RBI grievance body; escalation path when the bank
   ignores a complaint for 30 days. Filed via the CMS portal.
+- **LAF Repo Rate** — the rate at which RBI lends to banks (Liquidity Adjustment
+  Facility); NEFT delay compensation is penal interest at repo + 2%.
+- **Penal interest** — interest paid as a penalty for delay (NEFT regime), as opposed
+  to the flat ₹100/day of the TAT circular.
+- **Batch settlement** — NEFT processes in half-hourly batches (not real-time like
+  IMPS/UPI); its 2-hour credit/return clock starts at batch settlement.
+- **On-us / off-us** — whether both legs of a transaction stay inside one institution
+  (on-us) or cross to another via a rail like UPI/card network (off-us).
+- **Decision log / ADR** — a file recording each judgment call with reasoning and
+  residual risk; standard practice in regulated software (see rules/DECISIONS.md).

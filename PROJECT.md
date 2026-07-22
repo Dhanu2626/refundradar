@@ -3,14 +3,17 @@
 Read this first every session ("start day" ritual). Full plan:
 `..\REFUNDRADAR-PLAN.md` (CareerForge root).
 
-## Current phase: 0 — Rulebook as code
+## Current phase: 1 — Statement ingestion (Phase 0 ✅ complete 2026-07-22)
 
 | Slice | Status |
 |---|---|
 | 0.1 Repo scaffold, README, ledgers, .gitignore | ✅ 2026-07-22 |
 | 0.2 Read RBI/2019-20/67, encode annex as `rules/rbi_tat.yaml` | ✅ 2026-07-22 |
 | 0.3 Rules engine (`refundradar/rules_engine.py`) + unit tests | ✅ 2026-07-22 |
-| 0.4 Edge-case day: working-day vs calendar nuance, NEFT (separate RBI rules), PPI off-us — research + document decisions in `rules/DECISIONS.md` | ⬜ next session |
+| 0.4 Edge cases researched → `rules/DECISIONS.md` (D1 calendar days, D2 NEFT deferred, D3 PPI off-us inherits rail, D4 floor-not-ceiling) | ✅ 2026-07-22 |
+| 1.1 Canonical transaction schema (`refundradar/model.py`) + channel-detection heuristics from narration text | ⬜ next session |
+| 1.2 Synthetic statement generator (`samples/`) with planted failures | ⬜ |
+| 1.3 First real parser: one bank's CSV export → canonical schema | ⬜ |
 
 ## Next phases (see plan for detail)
 

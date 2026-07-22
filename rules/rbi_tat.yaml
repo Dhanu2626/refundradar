@@ -71,7 +71,8 @@ channels:
     scenario: Beneficiary not credited / no merchant confirmation
     reversal_deadline_days: 1
 
-# Not covered by this circular (tracked in rules/DECISIONS.md, slice 0.4):
-#   - NEFT/RTGS: separate RBI procedural guidelines (penal-interest regime,
-#     not the flat ₹100/day) — needs its own rule entry later.
-#   - PPI off-us: to verify against circular annex before encoding.
+# Interpretations and out-of-scope channels: see rules/DECISIONS.md
+#   D1: deadlines are calendar days (circular defines T as calendar date)
+#   D2: NEFT/RTGS excluded — separate penal-interest regime (repo + 2%),
+#       per DPSS (CO) EPPD No.477/04.03.01/2010-11; deferred to a later phase
+#   D3: PPI off-us has no entry here — it inherits the underlying rail's rule
