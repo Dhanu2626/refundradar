@@ -39,3 +39,17 @@
   so downstream code never deals with per-bank differences.
 - **Decimal vs float** — money math must use exact decimal arithmetic; binary
   floats can't represent 0.1 and drift by paise.
+- **Ground truth** — data where the correct answer is known in advance; the only
+  way to measure a detector honestly.
+- **Precision / recall** — of everything flagged, how much was right (precision);
+  of everything that should be flagged, how much was found (recall).
+- **Seeded randomness** — random-looking output that reproduces exactly from a
+  seed number, making it testable.
+- **Reversal vs refund** — a reversal returns money for a FAILED transaction
+  (compensation applies); a refund returns money for a successful-then-returned
+  purchase (no compensation). Structurally identical on a statement.
+- **Account Aggregator (AA)** — RBI's consent rail for sharing bank data: the
+  customer approves in a licensed AA app, data flows encrypted, no credentials
+  shared. Requires registered FIU status to use — our documented v2 ambition.
+- **Data minimisation** — collect only what the task needs; RefundRadar v1 asks
+  for nothing but the statement file itself.

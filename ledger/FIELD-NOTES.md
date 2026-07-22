@@ -66,3 +66,27 @@ Transaction model and everything downstream is bank-agnostic."
 
 **Next session:** slice 1.2 — the synthetic statement generator with planted
 failures, our ground truth for measuring reconciliation accuracy in Phase 2.
+
+## Day 4 — 2026-07-23 · Slice 1.2: the statement factory + product stance
+
+🏦 **Payments/RegTech insight:** a credit with the same reference number as a debit
+is NOT always a failed-transaction reversal — a genuine merchant refund (returned
+order) looks structurally identical. The signal lives in narration language ("REV
+OF FAILED TXN" vs "REFUND ORDER RETURN") and timing. Our synthetic statement plants
+exactly this trap so Phase 2's reconciler is forced to learn the difference —
+wrongly claiming ₹500 on a Myntra return would sink a real complaint's credibility.
+Also banked today: the v1/v2 data stance — data minimisation now, Account
+Aggregator (consent-rail) as the documented regulated-entity ambition.
+
+🔧 **Engineering insight:** two patterns. (1) Deterministic randomness — the
+generator takes a seed, so "random-looking" data is perfectly reproducible and
+therefore testable; flaky test data is worse than no test data. (2) Single source
+of truth — the answer key's expected compensation is computed BY the rules engine
+itself, so the grader and the graded can never drift apart silently.
+
+🎯 **Interview line:** "Before building the detector, I built the exam it has to
+pass: synthetic statements with planted failures and one false-positive trap,
+graded as precision and recall — because 'it seems to work' is not a metric."
+
+**Next session:** slice 1.3 — the first real parser: read the generic CSV format
+into canonical Transactions, and the engine reads its first full statement.

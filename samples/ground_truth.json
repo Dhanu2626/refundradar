@@ -1,0 +1,62 @@
+{
+  "seed": 26,
+  "start": "2026-01-01",
+  "days": 180,
+  "incidents": [
+    {
+      "ref": "822439055664",
+      "channel": "upi_p2m",
+      "amount": "750",
+      "txn_date": "2026-01-21",
+      "refund_date": "2026-01-24",
+      "is_incident": true,
+      "note": "failed UPI merchant payment, refunded on time (T+5)",
+      "days_late": 0,
+      "compensation_inr": 0
+    },
+    {
+      "ref": "585096075773",
+      "channel": "upi_p2m",
+      "amount": "2000",
+      "txn_date": "2026-02-15",
+      "refund_date": "2026-02-28",
+      "is_incident": true,
+      "note": "failed UPI merchant payment, refunded 8 days late -> Rs.800",
+      "days_late": 8,
+      "compensation_inr": 800
+    },
+    {
+      "ref": "289386157692",
+      "channel": "atm",
+      "amount": "5000",
+      "txn_date": "2026-03-12",
+      "refund_date": "2026-03-23",
+      "is_incident": true,
+      "note": "ATM cash-not-dispensed, refunded 6 days late -> Rs.600",
+      "days_late": 6,
+      "compensation_inr": 600
+    },
+    {
+      "ref": "444363915096",
+      "channel": "upi_p2p",
+      "amount": "2499",
+      "txn_date": "2026-06-15",
+      "refund_date": null,
+      "is_incident": true,
+      "note": "failed UPI P2P, never refunded \u2014 compensation accruing daily",
+      "days_late": null,
+      "compensation_inr": null
+    },
+    {
+      "ref": "276460218586",
+      "channel": "upi_p2m",
+      "amount": "1299",
+      "txn_date": "2026-04-06",
+      "refund_date": "2026-04-16",
+      "is_incident": false,
+      "note": "TRAP: genuine merchant refund for a returned order \u2014 NOT a failed transaction; a ref-only matcher would wrongly claim Rs.500 here",
+      "days_late": null,
+      "compensation_inr": null
+    }
+  ]
+}

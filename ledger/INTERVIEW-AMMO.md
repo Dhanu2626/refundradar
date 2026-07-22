@@ -22,6 +22,16 @@
    transaction schema, so adding a new bank means writing one parser — nothing
    downstream knows or cares which bank the data came from."
 
+6. (2026-07-23) "Before building the detector, I built the exam it has to pass:
+   synthetic statements with planted failures and one false-positive trap — a
+   genuine merchant refund that looks identical to a failed-transaction reversal —
+   graded as precision and recall."
+
+7. (2026-07-23) "I designed v1 around data minimisation — the app asks for nothing
+   a scammer would want — but architected the schema so RBI's Account Aggregator
+   rail can plug in as just another parser when the product justifies
+   regulated-entity status."
+
 ---
 
 ## The "isn't this trivial?" defense (memorize the flow, not the words)
