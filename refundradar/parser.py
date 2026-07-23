@@ -46,3 +46,86 @@ def parse_generic_csv_text(text: str) -> list[Transaction]:
 
 def parse_generic_csv(path: str | Path) -> list[Transaction]:
     return parse_generic_csv_text(Path(path).read_text(encoding="utf-8-sig"))
+
+
+def _amount(value) -> "Decimal | None":
+    from decimal import Decimal, InvalidOperation
+    text = str(value).replace(",", "").replace("₹", "").strip()
+    if not text or text in ("-", "None"):
+        return None
+    try:
+        d = Decimal(text)
+    except InvalidOperation:
+        return None
+    return d if d != 0 else None
+
+
+def parse_sbi_rows(rows: list[list]) -> list[Transaction]:
+    """Map SBI's spreadsheet layout onto the canonical schema.
+
+    SBI statements carry preamble rows (account holder, branch, period)
+    before a header row like: Txn Date | Value Date | Description |
+    Ref No./Cheque No. | Branch Code | Debit | Credit | Balance.
+    Columns are located by header NAME, not position, so layout drift
+    across portal versions doesn't break the mapping.
+    """
+    from refundradar.formats import _cell_date
+
+    header_idx, cols = None, {}
+    for idx, row in enumerate(rows):
+        names = [str(c).strip().lower() if c is not None else "" for c in row]
+        if any("date" in n for n in names) and any("debit" in n for n in names):
+            for i, n in enumerate(names):
+                if "txn date" in n or n == "date" or "transaction date" in n:
+                    cols.setdefault("date", i)
+                elif "description" in n or "narration" in n or "particulars" in n:
+                    cols["narration"] = i
+                elif "ref" in n or "cheque" in n:
+                    cols["ref"] = i
+                elif "debit" in n:
+                    cols["debit"] = i
+                elif "credit" in n:
+                    cols["credit"] = i
+                elif "balance" in n:
+                    cols["balance"] = i
+            if {"date", "narration", "debit", "credit"} <= set(cols):
+                header_idx = idx
+                break
+            cols = {}
+    if header_idx is None:
+        raise ValueError(
+            "Could not find SBI's transaction table header (Txn Date / "
+            "Description / Debit / Credit) in this file."
+        )
+
+    txns = []
+    for row in rows[header_idx + 1:]:
+        get = lambda key: row[cols[key]] if key in cols and cols[key] < len(row) else None
+        txn_date = _cell_date(get("date")) if get("date") is not None else None
+        if txn_date is None:
+            continue
+        debit, credit = _amount(get("debit")), _amount(get("credit"))
+        if debit is None and credit is None:
+            continue
+        narration = str(get("narration") or "").strip()
+        t = make_transaction(txn_date, debit if debit is not None else credit,
+                             debit is not None, narration,
+                             balance=_amount(get("balance")), bank="SBI")
+        ref_cell = str(get("ref") or "").strip()
+        if ref_cell and ref_cell.upper() not in ("", "-", "NONE", "TRANSFER TO", "TRANSFER FROM"):
+            if t.ref is None:
+                t.ref = ref_cell
+        txns.append(t)
+    return txns
+
+
+def parse_statement_file(
+    path: str | Path, password: str | None = None
+) -> list[Transaction]:
+    """Open any supported statement file: CSV, xlsx, xls, or encrypted."""
+    from refundradar.formats import load_rows, sniff
+
+    data = Path(path).read_bytes()
+    if sniff(data) == "text":
+        return parse_generic_csv_text(data.decode("utf-8-sig"))
+    return parse_sbi_rows(load_rows(data, password=password))

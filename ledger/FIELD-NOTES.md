@@ -141,3 +141,27 @@ nobody can argue with."
 
 **Next:** the field test — first real statement ever. Parser for Dhanush's own
 bank format; every narration surprise becomes a fix and a field note.
+
+## Day 7 — 2026-07-24 · Field test part 1: SBI's three disguises
+
+🏦 **Payments/RegTech insight:** the first real statement never reached the
+parser — it was stopped by the file itself. SBI exports a password-protected
+AES-encrypted OLE2 container wearing an .xlsx extension (a real .xlsx is a ZIP;
+SBI's is neither). Finding #1 of the field test: for real users, the wall isn't
+parsing — it's opening. Product answer: format sniffing by magic bytes, in-app
+decryption where the USER types the password locally, and error messages that
+explain instead of crash.
+
+🔧 **Engineering insight:** map spreadsheet columns by header NAME, never by
+position — bank portals shuffle layouts between versions. And detect file types
+from magic bytes (PK zip vs D0CF11E0 OLE2), never from extensions — banks lie
+about extensions. Passwords are handled only at runtime by the user's own hand:
+never stored, never logged, never asked for in chat.
+
+🎯 **Interview line:** "My first real-world test failed before parsing began —
+the bank's file was an encrypted OLE2 container with a fake .xlsx extension.
+I shipped format sniffing by magic bytes and local-only decryption the same day.
+Real data breaks assumptions synthetic data can't even express."
+
+**Next:** Dhanush unlocks his statement (password stays with him) → first real
+audit → fix every narration surprise the SBI vocabulary throws at us.
