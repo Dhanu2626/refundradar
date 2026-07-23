@@ -127,5 +127,10 @@ def parse_statement_file(
 
     data = Path(path).read_bytes()
     if sniff(data) == "text":
-        return parse_generic_csv_text(data.decode("utf-8-sig"))
+        text = data.decode("utf-8-sig", errors="replace")
+        try:
+            return parse_generic_csv_text(text)
+        except ValueError:
+            rows = list(csv.reader(io.StringIO(text)))
+            return parse_sbi_rows(rows)
     return parse_sbi_rows(load_rows(data, password=password))

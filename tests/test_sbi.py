@@ -63,3 +63,19 @@ def test_sniff_magic_bytes():
     assert sniff(ZIP_MAGIC + b"rest") == "xlsx"
     assert sniff(b"Date,Narration\n1,2") == "text"
     assert sniff(b"  <html><table>") == "html"
+
+
+def test_sbi_csv_export_routes_to_sbi_mapper(tmp_path):
+    from refundradar.parser import parse_statement_file
+    csv_text = (
+        "Account Name,:,MR TEST\n"
+        "Txn Date,Value Date,Description,Ref No./Cheque No.,Branch Code,Debit,Credit,Balance\n"
+        '3 Feb 2026,3 Feb 2026,TO TRANSFER-UPI/DR/504212345678/SWIGGY.ORDER@ICICI/PAY,504212345678,1234,450.00,,"39,550.00"\n'
+        '4 Feb 2026,4 Feb 2026,BY TRANSFER-UPI/CR/504212345678/REVERSAL OF FAILED TXN,504212345678,1234,,450.00,"40,000.00"\n'
+    )
+    f = tmp_path / "sbi.csv"
+    f.write_text(csv_text, encoding="utf-8")
+    txns = parse_statement_file(f)
+    assert len(txns) == 2
+    assert txns[0].channel == "upi_p2m"
+    assert txns[0].bank == "SBI"
