@@ -128,7 +128,8 @@
     </div>
   </div>
 
-  <footer>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs 100% locally.</footer>
+  <footer>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs 100% locally.<br>
+    Self-help tool, not legal advice &mdash; verify details before submitting any complaint.</footer>
 </div>
 
 <script>
@@ -164,7 +165,9 @@ async function runAudit() {
 function incidentRow(i) {
   const when = new Date(i.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   let badge = "", sub = i.reason;
-  if (i.status === "refunded_late") badge = `<span class="badge late">${inr(i.compensation_inr)} owed</span>`;
+  if (i.time_barred)
+    badge = `<span class="badge info">${inr(i.compensation_inr)} &mdash; older claim, not in total</span>`;
+  else if (i.status === "refunded_late") badge = `<span class="badge late">${inr(i.compensation_inr)} owed</span>`;
   else if (i.status === "never_refunded") badge = `<span class="badge never">${inr(i.compensation_inr)} and counting</span>`;
   else if (i.status === "refunded_on_time") badge = `<span class="badge ok">On time</span>`;
   else if (i.status === "excluded_genuine_refund") badge = `<span class="badge info">Genuine refund &mdash; excluded</span>`;

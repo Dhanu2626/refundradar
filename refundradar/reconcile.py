@@ -33,6 +33,7 @@ class Incident:
     ruling: Ruling | None
     reason: str
     refund_date: date | None = None
+    time_barred: bool = False  # set by the audit layer (DECISIONS.md, D8)
 
 
 def _language(narration: str) -> str:

@@ -75,6 +75,21 @@ payment they know failed; only confirmed refs enter the claim.
 **Why:** every claim in the complaint letter must survive the bank's scrutiny. One
 fabricated incident poisons the credibility of all the real ones.
 
+## D8 — Incidents older than one year leave the headline and the letter (2026-07-24)
+
+**Decision:** claims where the transaction is more than 365 days old (relative to the
+audit date) are flagged `time_barred`, excluded from the headline total and from the
+letter's demand table, and listed separately as informational.
+
+**Why:** under RB-IOS 2021 the ombudsman window technically runs from the bank's
+reply to a complaint, not from the transaction — so old incidents are not strictly
+dead. But banks contest stale claims, record-retention gets invoked, and one
+successfully rebuffed line item damages the credibility of the whole letter. Same
+principle as D4/D5: the headline number must be the amount nobody can argue with.
+
+**Risk:** we under-claim for users with genuinely recoverable older incidents. The
+letter still lists them informationally, so the user can pursue them deliberately.
+
 ## D7 — v1 UI is a single vanilla-JS page, not React (2026-07-23)
 
 **Decision:** the web app is one HTML file served by FastAPI; the browser holds the

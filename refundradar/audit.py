@@ -20,15 +20,20 @@ class Audit:
 
     def __post_init__(self):
         for i in self.incidents:
-            if i.status in (LATE, NEVER) and i.ruling:
-                self.total_owed_inr += i.ruling.compensation_inr
-            if i.status == NEVER:
-                self.stuck_amount += i.txn.amount
+            if i.status in (LATE, NEVER):
+                if (self.as_of - i.txn.txn_date).days > 365:
+                    i.time_barred = True  # D8: out of the headline, into a warning
+                    continue
+                if i.ruling:
+                    self.total_owed_inr += i.ruling.compensation_inr
+                if i.status == NEVER:
+                    self.stuck_amount += i.txn.amount
             if i.status == ON_TIME:
                 self.on_time_count += 1
 
     def claimable(self) -> list[Incident]:
-        return [i for i in self.incidents if i.status in (LATE, NEVER)]
+        return [i for i in self.incidents
+                if i.status in (LATE, NEVER) and not i.time_barred]
 
 
 def build_audit(
@@ -53,6 +58,7 @@ def to_dict(a: Audit) -> dict:
     def inc(i: Incident) -> dict:
         return {
             "status": i.status,
+            "time_barred": i.time_barred,
             "reason": i.reason,
             "date": i.txn.txn_date.isoformat(),
             "amount": str(i.txn.amount),

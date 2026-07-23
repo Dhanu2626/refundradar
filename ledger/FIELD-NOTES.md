@@ -117,3 +117,27 @@ you have to design the human confirmation into the product."
 
 **Next:** real bank CSV formats (HDFC/SBI/ICICI), PDF statements, field test on
 family statements. The engine is done; v1.0 is about meeting real data.
+
+## Day 6 — 2026-07-24 · Council verdict + the honesty layer (D8)
+
+🏦 **Payments/RegTech insight:** a claim's age changes its nature. Under RB-IOS
+2021 the ombudsman window runs from the bank's reply to your complaint — not from
+the transaction — so old incidents aren't legally dead, but banks contest stale
+claims and one rebuffed line item taints the whole letter. So RefundRadar now
+splits the audit into "the number nobody can argue with" (headline, < 1 year) and
+"informational older incidents" (listed, flagged, out of the demand). Compliance
+thinking is largely the art of deciding what NOT to claim.
+
+🔧 **Engineering insight:** the 4-agent council format surfaced a synthesis no
+single viewpoint had: a hosted demo AND the local-only privacy story can coexist
+if the public page is structurally incapable of receiving uploads (synthetic-only
+demo build). Constraints don't always trade off; sometimes an architecture
+dissolves the conflict.
+
+🎯 **Interview line:** "My audit flags claims older than a year and keeps them out
+of the headline and the letter — because under RB-IOS 2021 the window runs from
+the bank's reply, banks contest stale claims, and the headline must be the amount
+nobody can argue with."
+
+**Next:** the field test — first real statement ever. Parser for Dhanush's own
+bank format; every narration surprise becomes a fix and a field note.

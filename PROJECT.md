@@ -20,13 +20,17 @@ Read this first every session ("start day" ritual). Full plan:
 | 5. Web app (`refundradar/webapp.py` + `static/index.html`) — drop zone, demo mode, audit screen, confirm flow, complaint download; verified live in browser | ✅ 2026-07-23 |
 | CLI (`python -m refundradar serve|audit|demo`) | ✅ 2026-07-23 |
 
-## Roadmap to v1.0 (remaining)
+## Roadmap to v1.0 — council order (4-agent review, 2026-07-24)
 
-- Real bank formats: HDFC/SBI/ICICI/Kotak CSV exports (each is one small reader)
-- PDF statement support (pdfplumber)
-- Per-bank grievance-cell addresses in the letter
-- "How do I get my statement?" helper with per-bank screenshots (UX-SPEC screen 1)
-- Field-test on real family statements → accuracy notes
+1. **Real-statement field test** — parser for Dhanush's own bank's export, run on
+   a real statement, fix every narration surprise. Blocked on: statement file in
+   `statements/` (gitignored). ⬅ NEXT
+2. **Honesty layer** — D8 time-barred flag + self-help disclaimer ✅ 2026-07-24
+3. **Public demo page** — synthetic-only, no upload capability, hosted static
+4. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1)
+
+Deferred post-v1.0: Hindi/Telugu UI, packaged .exe, SMS parsing, PDF statements,
+per-bank grievance addresses, mobile.
 
 ## Next phases (see plan for detail)
 
