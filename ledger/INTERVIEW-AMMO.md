@@ -46,6 +46,12 @@
    on-time, and I could trust the zero because the detector demonstrably works,
    not because it stayed silent."
 
+10. (2026-07-24) "I resolved a privacy-versus-reach conflict at build time: the
+    public demo is the real engine's output frozen into a static page with no
+    upload surface at all — provably unable to receive a statement — so the tool
+    is both shareable and structurally private, with a test enforcing the
+    no-upload guarantee."
+
 ---
 
 ## The "isn't this trivial?" defense (memorize the flow, not the words)

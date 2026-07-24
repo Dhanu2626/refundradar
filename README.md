@@ -4,6 +4,9 @@
 
 **The payments auditor your bank hopes you never run.**
 
+▶️ **[Try the live demo](https://dhanu2626.github.io/refundradar/)** — a real audit of
+a synthetic statement (no install, no upload; the demo page can't receive a file).
+
 When a digital payment fails in India — money debited, credit never arrives — RBI circular
 [RBI/2019-20/67 (Sept 20, 2019)](https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11693)
 requires your bank to auto-reverse it within a fixed deadline (T+1 calendar day for UPI

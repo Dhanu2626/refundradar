@@ -27,8 +27,10 @@ Read this first every session ("start day" ritual). Full plan:
    owed (verified honest); discovered SBI reverses under a fresh reference →
    amount+timing fallback matching (D9). 106 real txns parsed.
 2. **Honesty layer** — D8 time-barred flag + self-help disclaimer ✅ 2026-07-24
-3. **Public demo page** — synthetic-only, no upload capability, hosted static
-4. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1)
+3. **Public demo page** ✅ 2026-07-24 — static synthetic-only page (no upload
+   possible), built by tools/build_demo_page.py from the real engine output,
+   live at https://dhanu2626.github.io/refundradar/ (GitHub Pages, main /docs)
+4. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1) ⬅ NEXT
 
 Deferred post-v1.0: Hindi/Telugu UI, packaged .exe, SMS parsing, PDF statements,
 per-bank grievance addresses, mobile.

@@ -194,3 +194,26 @@ tool never fabricates a claim."
 
 **Next (council move 3):** the synthetic-only public demo page. Or extend the SBI
 parser hardening with more real narration varieties.
+
+## Day 9 — 2026-07-24 · Public demo page shipped (council move 3)
+
+🏦 **Payments/RegTech insight:** a compliance tool's credibility comes from showing
+its work, not asserting a result. The demo page reveals the full complaint pack —
+clause citations, evidence table, ombudsman draft — behind one toggle, so a skeptic
+sees the RBI circular applied line by line, not just a headline number. "Here's what
+you're owed AND here's the regulation that says so" is the whole trust proposition.
+
+🔧 **Engineering insight:** the privacy/reach conflict dissolved with a build-time
+choice. The engine runs ONCE at build, its output is frozen into a static page with
+no file input, no form, no fetch — so the public page is structurally incapable of
+receiving a real statement, while the full app stays local. A test asserts the
+absence of upload surface (no <input>, <form>, or fetch). Same engine, one code path,
+two honest deployments: private (uploadable, local) and public (frozen, synthetic).
+
+🎯 **Interview line:** "I resolved a privacy-versus-reach conflict at build time: the
+public demo is the real engine's output frozen into a static page with no upload
+surface at all — provably unable to receive a statement — so the tool is both
+shareable and structurally private, and a test enforces the no-upload guarantee."
+
+**Next (council move 4):** the per-bank statement-download helper (UX-SPEC screen 1),
+or a LinkedIn launch post now that there's a live link to point to.
