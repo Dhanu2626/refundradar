@@ -30,7 +30,9 @@ Read this first every session ("start day" ritual). Full plan:
 3. **Public demo page** ✅ 2026-07-24 — static synthetic-only page (no upload
    possible), built by tools/build_demo_page.py from the real engine output,
    live at https://dhanu2626.github.io/refundradar/ (GitHub Pages, main /docs)
-4. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1) ⬅ NEXT
+4. **Public launch** ✅ 2026-07-24 — LinkedIn post with a 4-step screenshot
+   walkthrough; repo pinned, MIT licensed, topics + homepage set, v0.9.5 released
+5. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1) ⬅ NEXT
 
 Deferred post-v1.0: Hindi/Telugu UI, packaged .exe, SMS parsing, PDF statements,
 per-bank grievance addresses, mobile.

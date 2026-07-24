@@ -52,6 +52,11 @@
     is both shareable and structurally private, with a test enforcing the
     no-upload guarantee."
 
+11. (2026-07-24) "I shipped it end to end — regulation encoded as tested code,
+    field-tested on a real bank statement, a live demo that structurally cannot
+    receive user data, MIT-licensed with CI on every push, and a public launch.
+    Not a prototype in a folder: a product other people can run."
+
 ---
 
 ## The "isn't this trivial?" defense (memorize the flow, not the words)

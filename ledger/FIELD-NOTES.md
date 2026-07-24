@@ -217,3 +217,31 @@ shareable and structurally private, and a test enforces the no-upload guarantee.
 
 **Next (council move 4):** the per-bank statement-download helper (UX-SPEC screen 1),
 or a LinkedIn launch post now that there's a live link to point to.
+
+## Day 10 — 2026-07-24 · SHIPPED PUBLICLY (LinkedIn launch)
+
+RefundRadar is public: live demo, MIT-licensed repo, and a launch post with a
+4-step screenshot walkthrough of the pipeline.
+
+🏦 **Payments/RegTech insight:** writing the launch post forced a translation test
+the code never did — every term had to survive being explained to someone who has
+never heard of a TAT circular. "Canonical schema" became "one standard internal
+format"; "narration lexicon" became "the wording of the line"; reversal-vs-refund
+became "the payment failed" vs "you returned an order." If a compliance concept
+can't survive that translation, you don't understand it well enough to defend it
+in an interview either.
+
+🔧 **Engineering insight:** the launch blocked on a UI behaviour no amount of
+planning would have predicted — LinkedIn *removes* the photo button from the DOM
+once the composer holds text, so images can never be attached afterwards. Verified
+by querying the DOM, not by guessing from the screenshot. The fix was ordering:
+images first, text second. Debugging someone else's UI is the same discipline as
+debugging your own data — check what's actually there before theorising.
+
+🎯 **Interview line:** "I shipped it end to end — regulation encoded as tested
+code, field-tested on a real bank statement, a live demo that structurally cannot
+receive user data, MIT-licensed with CI on every push, and a public launch. Not a
+prototype in a folder: a product other people can run."
+
+**Next:** council move 4 (per-bank statement-download helper), a second bank
+parser when a real sample is available, or field-testing with family statements.
