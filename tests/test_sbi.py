@@ -65,6 +65,60 @@ def test_sniff_magic_bytes():
     assert sniff(b"  <html><table>") == "html"
 
 
+def _sbi_txn(day, amount, is_debit, narration, ref):
+    from refundradar.model import make_transaction
+    return make_transaction(date(2026, 6, day), amount, is_debit, narration,
+                            bank="SBI")
+
+
+def test_fresh_ref_reversal_on_time_is_matched():
+    from refundradar.reconcile import ON_TIME, reconcile
+    txns = [
+        _sbi_txn(10, "500.00", True,
+                 "WDL TFR UPI/DR/616128000001/LENSKART/Payment", "x"),
+        _sbi_txn(10, "500.00", False,
+                 "DEP TFR UPI/REF/616903000009/CR", "y"),  # same day, fresh ref
+    ]
+    incs = reconcile(txns)
+    assert len(incs) == 1
+    assert incs[0].status == ON_TIME  # on time -> Rs.0, no user action
+
+
+def test_fresh_ref_reversal_late_needs_confirmation_not_autoclaim():
+    from refundradar.reconcile import CONFIRM, reconcile
+    txns = [
+        _sbi_txn(1, "500.00", True,
+                 "WDL TFR UPI/DR/616128000002/PAYTMQR9@PAYTM/Pay", "x"),
+        _sbi_txn(9, "500.00", False,
+                 "DEP TFR UPI/REF/616903000010/CR", "y"),  # 8 days later, p2m T+5
+    ]
+    incs = reconcile(txns)
+    assert len(incs) == 1
+    assert incs[0].status == CONFIRM  # inferred link -> never an auto-claim
+
+
+def test_ordinary_same_amount_roundtrip_is_not_flagged():
+    from refundradar.reconcile import reconcile
+    txns = [
+        _sbi_txn(1, "500.00", True,
+                 "WDL TFR UPI/DR/616128000003/J JYOSHNA/Pay", "x"),
+        _sbi_txn(3, "500.00", False,
+                 "DEP TFR UPI/CR/616903000011/J JYOSHNA", "y"),  # normal incoming
+    ]
+    assert reconcile(txns) == []  # a coincidental round-trip, not a reversal
+
+
+def test_reversal_outside_window_is_not_matched():
+    from refundradar.reconcile import reconcile
+    txns = [
+        _sbi_txn(1, "500.00", True,
+                 "WDL TFR UPI/DR/616128000004/LENSKART/Pay", "x"),
+        _sbi_txn(20, "500.00", False,
+                 "DEP TFR UPI/REF/616903000012/CR", "y"),  # 19 days > window
+    ]
+    assert reconcile(txns) == []
+
+
 def test_sbi_csv_export_routes_to_sbi_mapper(tmp_path):
     from refundradar.parser import parse_statement_file
     csv_text = (

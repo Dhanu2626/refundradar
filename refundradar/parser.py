@@ -78,7 +78,8 @@ def parse_sbi_rows(rows: list[list]) -> list[Transaction]:
             for i, n in enumerate(names):
                 if "txn date" in n or n == "date" or "transaction date" in n:
                     cols.setdefault("date", i)
-                elif "description" in n or "narration" in n or "particulars" in n:
+                elif ("description" in n or "narration" in n
+                      or "particulars" in n or "detail" in n):
                     cols["narration"] = i
                 elif "ref" in n or "cheque" in n:
                     cols["ref"] = i

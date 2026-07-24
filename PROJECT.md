@@ -22,9 +22,10 @@ Read this first every session ("start day" ritual). Full plan:
 
 ## Roadmap to v1.0 — council order (4-agent review, 2026-07-24)
 
-1. **Real-statement field test** — parser for Dhanush's own bank's export, run on
-   a real statement, fix every narration surprise. Blocked on: statement file in
-   `statements/` (gitignored). ⬅ NEXT
+1. **Real-statement field test** ✅ 2026-07-24 — SBI parser (encrypted-OLE2
+   sniffing, "Details" column, WDL/DEP TFR narrations); first real audit = Rs.0
+   owed (verified honest); discovered SBI reverses under a fresh reference →
+   amount+timing fallback matching (D9). 106 real txns parsed.
 2. **Honesty layer** — D8 time-barred flag + self-help disclaimer ✅ 2026-07-24
 3. **Public demo page** — synthetic-only, no upload capability, hosted static
 4. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1)

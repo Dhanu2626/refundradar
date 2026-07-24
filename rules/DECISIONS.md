@@ -75,6 +75,27 @@ payment they know failed; only confirmed refs enter the claim.
 **Why:** every claim in the complaint letter must survive the bank's scrutiny. One
 fabricated incident poisons the credibility of all the real ones.
 
+## D9 — Amount+timing fallback for banks that reverse under a fresh reference (2026-07-24)
+
+**Decision:** after exact-reference matching, a second pass links a reversal-worded
+credit (e.g. SBI's `UPI/REF`) to the closest-in-time unclaimed debit of the same
+amount within 10 days. If the inferred pairing is on time, record it as such (Rs.0
+at stake); if it looks late, downgrade to `needs_confirmation` — never an automatic
+claim.
+
+**Why:** field test on a real SBI statement (2026-07-24) revealed SBI issues
+reversal credits with a NEW reference number, not the original payment's. Pure
+reference-matching was therefore blind to every SBI failure. The fallback restores
+detection, but since an amount+time link is inferred rather than proven, an inferred
+LATE match must be user-confirmed before it can enter a claim — same honesty rule as
+D6. An inferred on-time match is harmless (nothing is claimed), so it needs no
+confirmation.
+
+**Risk:** two same-amount debits near one reversal are genuinely ambiguous (seen in
+the field data: a same-day decoy beside an 8-day-old payment). Picking the closest
+biases toward the on-time reading, i.e. toward under-claiming — the conservative,
+defensible direction (D4).
+
 ## D8 — Incidents older than one year leave the headline and the letter (2026-07-24)
 
 **Decision:** claims where the transaction is more than 365 days old (relative to the

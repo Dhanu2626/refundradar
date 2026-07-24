@@ -7,6 +7,11 @@ What a statement alone can prove:
 A debit that never came back looks identical to a successful payment, so
 never-refunded failures require user confirmation (DECISIONS.md, D6) —
 passed in as confirmed_failed_refs.
+
+Two matching passes: (1) exact reference match, then (2) an amount+timing
+fallback for banks like SBI that issue reversals under a fresh reference
+(DECISIONS.md, D9). The fallback never auto-claims a late reversal — inferred
+links are downgraded to needs_confirmation.
 """
 
 from dataclasses import dataclass
@@ -16,7 +21,14 @@ from refundradar.model import Transaction, UNSUPPORTED_CHANNELS
 from refundradar.rules_engine import Ruling, evaluate
 
 REFUND_WORDS = ("REFUND", "RETURN", "CASHBACK")
-REVERSAL_WORDS = ("REV", "REVERSAL", "FAILED", "NOT DISPENSED", "DECLINED")
+# "UPI/REF" is SBI's marker for a reversal credit — and SBI issues it with a
+# FRESH reference, not the original payment's, so ref-matching can't tie it
+# back (field-tested 2026-07-24). The amount+window fallback pass handles it.
+REVERSAL_WORDS = ("REVERSAL", "REV OF", "UPI/REF", "FAILED", "NOT DISPENSED",
+                  "DECLINED", "RETURNED TO SENDER")
+
+# Amount+time fallback: how many days after a debit a reversal may appear.
+REVERSAL_WINDOW_DAYS = 10
 
 ON_TIME = "refunded_on_time"
 LATE = "refunded_late"
@@ -57,6 +69,8 @@ def reconcile(
             credits.setdefault(t.ref, []).append(t)
 
     incidents = []
+    claimed_debit_ids: set[int] = set()
+    used_credit_ids: set[int] = set()
     for d in (t for t in transactions if t.is_debit and t.ref):
         match = next(
             (c for c in credits.get(d.ref, [])
@@ -64,6 +78,8 @@ def reconcile(
             None,
         )
         if match is not None:
+            claimed_debit_ids.add(id(d))
+            used_credit_ids.add(id(match))
             lang = _language(match.narration)
             if lang == "ambiguous" and d.ref in confirmed:
                 lang = "reversal"
@@ -102,6 +118,7 @@ def reconcile(
                     refund_date=match.txn_date,
                 ))
         elif d.ref in confirmed:
+            claimed_debit_ids.add(id(d))
             if d.channel in UNSUPPORTED_CHANNELS or d.channel is None:
                 incidents.append(Incident(
                     d, UNSUPPORTED, None,
@@ -115,4 +132,62 @@ def reconcile(
                     "You confirmed this payment failed and no refund row "
                     "exists — compensation accrues every day until reversal.",
                 ))
+
+    incidents += _fallback_match_reversals(
+        transactions, claimed_debit_ids, used_credit_ids
+    )
     return incidents
+
+
+def _fallback_match_reversals(
+    transactions: list[Transaction],
+    claimed_debit_ids: set[int],
+    used_credit_ids: set[int],
+) -> list[Incident]:
+    """Catch reversals that carry a fresh reference (SBI-style).
+
+    A reversal-worded credit that no reference tied to a debit is matched to
+    the CLOSEST-in-time unclaimed debit of the same amount within the window.
+    Because the link is inferred, not proven by a shared reference:
+      - if the inferred pairing is on time (Rs.0 at stake) we record it as such;
+      - if it looks late (money would be claimed) we downgrade to
+        needs_confirmation, never an automatic claim (DECISIONS.md, D6/D9).
+    """
+    debits = [t for t in transactions if t.is_debit and id(t) not in claimed_debit_ids]
+    out = []
+    for c in transactions:
+        if c.is_debit or id(c) in used_credit_ids:
+            continue
+        if _language(c.narration) != "reversal":
+            continue
+        cands = sorted(
+            (d for d in debits
+             if d.amount == c.amount
+             and 0 <= (c.txn_date - d.txn_date).days <= REVERSAL_WINDOW_DAYS
+             and id(d) not in claimed_debit_ids
+             and d.channel not in UNSUPPORTED_CHANNELS and d.channel is not None),
+            key=lambda d: (c.txn_date - d.txn_date).days,
+        )
+        if not cands:
+            continue
+        d = cands[0]
+        claimed_debit_ids.add(id(d))
+        used_credit_ids.add(id(c))
+        ruling = evaluate(d.channel, d.txn_date, c.txn_date)
+        if ruling.on_time:
+            out.append(Incident(
+                d, ON_TIME, ruling,
+                "Reversal matched by amount and timing (your bank reverses with "
+                "a new reference) — completed within the deadline.",
+                refund_date=c.txn_date,
+            ))
+        else:
+            out.append(Incident(
+                d, CONFIRM, None,
+                f"A reversal of the same amount appeared {ruling.days_late} days "
+                "past the deadline, but your bank issues reversals with a fresh "
+                "reference, so this link is inferred from amount and timing. "
+                "Confirm this pairing before claiming.",
+                refund_date=c.txn_date,
+            ))
+    return out

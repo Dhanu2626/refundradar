@@ -165,3 +165,32 @@ Real data breaks assumptions synthetic data can't even express."
 
 **Next:** Dhanush unlocks his statement (password stays with him) → first real
 audit → fix every narration surprise the SBI vocabulary throws at us.
+
+## Day 8 — 2026-07-24 · FIRST REAL AUDIT + the SBI fresh-reference discovery
+
+The historic run: 106 real transactions parsed, 4 months, result **Rs.0 owed** —
+an honest, verified "your account is healthy." Three real surprises, three fixes:
+
+🏦 **Payments/RegTech insight (the big one):** SBI issues a reversal credit under a
+BRAND-NEW reference number, not the failed payment's — and marks it `UPI/REF`. Every
+prior assumption (and most naive reconcilers) match a refund to its debit by shared
+reference. That is structurally BLIND to SBI failures. Real bank data quietly
+violated the core design assumption; only a real statement could have surfaced it.
+Fix: a second matching pass on amount + timing + reversal-wording, with inferred
+LATE links downgraded to needs-confirmation (never an auto-claim). Also learned SBI's
+column is "Details" not "Description", and its narrations read `WDL TFR`/`DEP TFR`.
+
+🔧 **Engineering insight:** the ambiguity was real — one reversal had TWO same-amount
+debit candidates (a same-day one and an 8-day-old one). "Pick the closest in time"
+biases toward the on-time reading, i.e. toward under-claiming — the conservative,
+defensible direction. When data is ambiguous, choose the interpretation you can
+defend, and write down why (D9).
+
+🎯 **Interview line:** "The first real bank statement broke my core assumption:
+SBI issues reversals under a fresh reference, so reference-matching was blind to
+every SBI failure. I found it because I tested on real data, added amount-and-timing
+fallback matching, and kept inferred late matches behind user confirmation so the
+tool never fabricates a claim."
+
+**Next (council move 3):** the synthetic-only public demo page. Or extend the SBI
+parser hardening with more real narration varieties.

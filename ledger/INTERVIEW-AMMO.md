@@ -34,6 +34,20 @@
 
 ---
 
+8. (2026-07-24) "The first real bank statement broke my core assumption: SBI
+   issues reversals under a fresh reference number, not the original payment's,
+   so reference-matching was structurally blind to every SBI failure. I only
+   found it by testing on real data — then added amount-and-timing fallback
+   matching, keeping inferred late matches behind user confirmation so the tool
+   never fabricates a claim."
+
+9. (2026-07-24) "My first real audit correctly returned zero owed — and that's a
+   feature: the tool found the one reversal in the statement, classified it
+   on-time, and I could trust the zero because the detector demonstrably works,
+   not because it stayed silent."
+
+---
+
 ## The "isn't this trivial?" defense (memorize the flow, not the words)
 
 When an interviewer says *"this is just date subtraction × ₹100"* — concede, then flip:
