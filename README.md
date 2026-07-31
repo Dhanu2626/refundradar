@@ -1,110 +1,116 @@
-# RefundRadar
+<p align="center"><img src="assets/hero-refundradar.svg" width="100%" alt="RefundRadar"/></p>
 
-![tests](https://github.com/Dhanu2626/refundradar/actions/workflows/ci.yml/badge.svg)
-[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Part of Dhanush Labs](https://img.shields.io/badge/PART_OF-DHANUSH_LABS-6366F1?style=flat-square&labelColor=0A0B0D)
+![Status](https://img.shields.io/badge/STATUS-V0.9_BETA-14B8A6?style=flat-square&labelColor=0A0B0D)
+![Tests](https://img.shields.io/badge/TESTS-69_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
+![License](https://img.shields.io/badge/LICENSE-MIT-6366F1?style=flat-square&labelColor=0A0B0D)
 
-**The payments auditor your bank hopes you never run.**
+### The Payments Auditor Your Bank Hopes You Never Run
 
-▶️ **[Try the live demo](https://dhanu2626.github.io/refundradar/)** — a real audit of a
-synthetic statement. No install, no signup, and the demo page cannot receive a file.
+**[▶ Try the live demo →](https://dhanu2626.github.io/refundradar/)** — a real audit of a synthetic statement. No install, no signup. The demo page cannot receive a file.
 
-When a digital payment fails in India — money debited, credit never arrives — RBI circular
-[RBI/2019-20/67 (20 September 2019)](https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11693)
-requires your bank to auto-reverse it within a fixed deadline (T+1 calendar day for UPI
-person-to-person, T+5 for UPI merchant payments and ATMs) and to pay you **₹100 for every
-day of delay — *suo moto*, without you even complaining.**
+---
 
-In practice, almost nobody checks whether the bank complied. RefundRadar checks.
+## Problem Statement
 
-## What it does
+> [!IMPORTANT]
+> When a digital payment fails in India — money debited, credit never arrives — [RBI circular RBI/2019-20/67](https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=11693) requires your bank to auto-reverse it within a fixed deadline and pay you ₹100 per day of delay, *suo moto*, without you complaining. In practice, almost nobody checks whether the bank complied. RefundRadar checks.
 
-1. **Parses** your bank statement export — Excel or CSV, including SBI's password-protected files.
-2. **Reconciles** every failed debit against its reversal — finds refunds that came late,
-   or never came at all, while ignoring genuine merchant refunds.
-3. **Applies the RBI circular as code** and computes exactly what your bank owes you,
-   clause by clause.
-4. **Generates the complaint pack** — grievance letter with an evidence table, a 30-day
-   escalation timeline, and a pre-filled RBI Ombudsman draft.
-
-## Privacy: local-first, always
-
-Everything runs on your own machine. No signup, no server, no upload.
-Your bank statements never leave your laptop. The repo's `.gitignore` refuses
-real statement files by design; only synthetic demo data is ever committed.
-When a statement is password-protected, you supply the password at runtime —
-it is never stored or logged.
-
-**Data minimisation is deliberate product strategy, not a limitation.** The app
-never asks for a name, DOB, phone number, or login — the statement file already
-contains every transaction the audit needs, and an app that asks for nothing
-can't leak anything. The consent-based "connect your bank" future (RBI's Account
-Aggregator rail) is documented as the v2 ambition in [UX-SPEC.md](UX-SPEC.md) —
-the canonical schema means an AA feed would plug in as just another parser.
-
-## Run it
-
-**Windows**
+## Architecture
 
 ```
+STATEMENT (.xlsx/.csv) ──parse──► RECONCILE debit ↔ reversal
+                                        │
+                                        ▼
+                          APPLY RBI/2019-20/67 AS CODE
+                                        │
+                                        ▼
+                       COMPLAINT PACK (letter + timeline + Ombudsman draft)
+```
+
+Everything runs locally — no server, no upload, statements never leave your machine.
+
+## How It Works
+
+```bash
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m refundradar serve
 ```
 
-**macOS / Linux**
+Open `http://127.0.0.1:8626` → "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
 
-```
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m refundradar serve
-```
+## Features
 
-Then open **http://127.0.0.1:8626** and click **"Try with a demo statement"**.
+- **Parses real bank exports** — Excel/CSV, including SBI's password-protected files.
+- **Reconciles every failed debit against its reversal** — flags late or missing refunds, ignores genuine merchant refunds.
+- **Applies the circular as code** — computes exactly what's owed, clause by clause.
+- **Generates the complaint pack** — grievance letter with evidence table, 30-day escalation timeline, pre-filled RBI Ombudsman draft.
+- **Privacy by construction** — no name, DOB, phone, or login ever requested; `.gitignore` refuses real statement files by design.
 
-Prefer the terminal?
+## Screenshots
 
-```
-python -m refundradar demo                     # audit the built-in synthetic statement
-python -m refundradar audit mystatement.xlsx   # audit your own (--password if locked)
-python -m pytest -q                            # run the test suite
-```
+> [!NOTE]
+> Add captures of the demo audit flow and a sample complaint pack output here.
 
-## Statement formats
+## Interactive Demo
 
-| Format | Status |
+**[dhanu2626.github.io/refundradar](https://dhanu2626.github.io/refundradar/)** — runs entirely against a synthetic statement; there is no upload endpoint on the demo build, so no file you provide can leave your browser.
+
+## Engineering Decisions
+
+Every judgment call is written down with reasoning and residual risk in `rules/DECISIONS.md`:
+
+| Decision | Reasoning |
 |---|---|
-| SBI Excel/CSV export, including password-protected files | ✅ field-tested on a real statement |
-| Generic CSV (`Date, Narration, Ref, Debit, Credit, Balance`) | ✅ |
-| Other banks | 🚧 each needs a small parser — see [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Deadlines counted in calendar days | The circular defines T as a calendar date |
+| NEFT excluded | Falls under a different regime (penal interest at repo + 2%) |
+| Ambiguous UPI defaults to the longer deadline | Keeps the claim undisputable |
+| Inferred reversals never auto-claimed | User confirms first, even when detectable from amount/timing |
+
+> [!WARNING]
+> This is a self-help tool applying published RBI circulars to your own statement. It is **not legal advice** — verify every figure before submitting a complaint.
+
+## Project Structure
+
+```
+refundradar/
+├── refundradar/           parsing, reconciliation, RBI rule engine, complaint generator
+├── rules/DECISIONS.md     every judgment call, written down
+├── tests/                 69 tests incl. planted-ground-truth reconciliation exam
+└── CONTRIBUTING.md        how to add a bank parser
+```
+
+## Tech Stack
+
+Python · pandas (statement parsing) · pytest
+
+## Results
+
+| Statement format | Status |
+|---|---|
+| SBI Excel/CSV (incl. password-protected) | ✅ field-tested on a real statement |
+| Generic CSV | ✅ |
+| Other banks | 🚧 in progress |
 | PDF statements | 🚧 planned |
 
-## How it decides
+69 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
 
-Financial rules are full of judgment calls, so every one of them is written down with its
-reasoning and residual risk in **[rules/DECISIONS.md](rules/DECISIONS.md)** — for example:
+## Future Improvements
 
-- deadlines are counted in calendar days, because the circular defines T as a calendar date
-- NEFT is excluded: it falls under a different regime (penal interest at repo + 2%)
-- ambiguous UPI payments default to the *longer* deadline, so the claim is undisputable
-- a reversal we inferred from amount and timing (SBI issues them under a fresh reference)
-  is never claimed automatically — the user confirms it first
+More bank formats, PDF statement parsing, per-bank grievance-cell addresses (v1.0 roadmap in `PROJECT.md`), and the RBI Account Aggregator consent-based "connect your bank" flow documented as the v2 ambition in `UX-SPEC.md`.
 
-## Status
+## Lessons Learned
 
-✅ **v0.9 beta** — the full journey works end to end in the browser and the CLI:
-parse → reconcile → audit → complaint pack. **69 tests**, including a planted-ground-truth
-exam the reconciler must pass (find every failure, fall for no traps), plus a live
-field test on a real SBI statement.
-
-Remaining for v1.0: more bank formats, PDF statements, per-bank grievance-cell addresses.
-Roadmap in [PROJECT.md](PROJECT.md).
-
-## Disclaimer
-
-RefundRadar is a self-help tool that applies RBI's published circulars to your own
-statement. It is not legal advice. Verify every figure against your records before
-submitting a complaint.
+Data minimization turned out to be a product strategy, not just a constraint — an app that never asks for identity data can't leak it. The canonical schema was built so an Account Aggregator feed would plug in as just another parser, not a rewrite.
 
 ## License
 
-[MIT](LICENSE) © 2026 Dhanush Jangadi
+MIT © 2026 Dhanush Jangadi
+
+## Contact
+
+Dhanush Jangadi — [GitHub](https://github.com/Dhanu2626) · [LinkedIn](https://www.linkedin.com/in/jangadidhanush)
+
+---
+<p align="center"><sub>Part of the <b>Dhanush Labs</b> portfolio · engineered by <a href="https://github.com/Dhanu2626">Dhanush Jangadi</a></sub></p>
