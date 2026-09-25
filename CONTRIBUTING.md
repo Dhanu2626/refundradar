@@ -16,7 +16,9 @@ fake references) and test against that. Real data stays on your machine, always.
 1. Export a statement from your bank and open it locally — note the header row, the exact
    column names, the date format, and how the narration is worded.
 2. Add a mapper in [`refundradar/parser.py`](refundradar/parser.py) alongside
-   `parse_sbi_rows`. Map columns **by header name, not position** — banks reshuffle layouts.
+   `parse_sbi_rows` and `parse_hdfc_rows`, and route to it from `_parse_bank_rows` on a
+   header signature only your bank's layout carries. Map columns **by header name, not
+   position** — banks reshuffle layouts.
 3. Add tests in `tests/` using synthetic rows in that bank's shape. Cover: the header hiding
    below preamble rows, both text and serial dates, comma-formatted amounts, and any
    reversal wording the bank uses.

@@ -1,13 +1,14 @@
 """Read a statement export into canonical Transactions.
 
-v1 supports the generic CSV format used by samples/ (Date,Narration,Ref,
-Debit,Credit,Balance with dd-mm-yyyy dates). Each real bank's export gets
-its own small reader later; all of them normalize into the same schema so
-nothing downstream cares where the data came from.
+Supports the generic CSV format used by samples/demo_statement.csv (Date,
+Narration,Ref,Debit,Credit,Balance with dd-mm-yyyy dates) plus bank exports:
+SBI and HDFC each get a small row mapper. All of them normalize into the same
+schema so nothing downstream cares where the data came from.
 """
 
 import csv
 import io
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -120,6 +121,107 @@ def parse_sbi_rows(rows: list[list]) -> list[Transaction]:
     return txns
 
 
+def _hdfc_columns(row: list) -> dict[str, int] | None:
+    """Column indexes if `row` is HDFC's transaction header, else None.
+
+    HDFC's Excel export heads the table Date | Narration | Chq./Ref.No. |
+    Value Dt | Withdrawal Amt. | Deposit Amt. | Closing Balance; its
+    "Delimited" text export says Debit Amount / Credit Amount / Chq/Ref
+    Number instead. "Narration" plus "Closing Balance" is a pairing SBI's
+    layout never carries, which is what routes a file here.
+    """
+    cols = {}
+    for i, cell in enumerate(row):
+        n = str(cell).strip().lower() if cell is not None else ""
+        if n == "date":
+            cols.setdefault("date", i)
+        elif "narration" in n:
+            cols["narration"] = i
+        elif "ref" in n:
+            cols["ref"] = i
+        elif "withdrawal" in n or "debit" in n:
+            cols["debit"] = i
+        elif "deposit" in n or "credit" in n:
+            cols["credit"] = i
+        elif "closing balance" in n:
+            cols["balance"] = i
+    if {"date", "narration", "debit", "credit", "balance"} <= set(cols):
+        return cols
+    return None
+
+
+def _hdfc_ref(cell) -> str | None:
+    """HDFC's Chq./Ref.No. cell as a reference, or None.
+
+    HDFC left-pads a 12-digit UPI/IMPS RRN to 16 digits (0000603412345678);
+    unpadding lines it up with the same RRN quoted in another row's
+    narration. An all-zero cell means the row has no reference.
+    """
+    ref = str(cell or "").strip()
+    if not ref.strip("0"):
+        return None
+    m = re.fullmatch(r"0000(\d{12})", ref)
+    return m.group(1) if m else ref
+
+
+def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
+    """Map HDFC's statement layouts onto the canonical schema.
+
+    The Excel export hides the header below preamble rows (customer, branch,
+    period) between rows of asterisks, and ends with a STATEMENT SUMMARY
+    block of totals. The Delimited export is the same table with every field
+    space-padded and 0.00 in the unused amount column. Dates are dd/mm/yy.
+
+    Built from HDFC's known export layouts and synthetic samples; no real
+    HDFC statement has been through it yet (unlike SBI's field test).
+    """
+    from refundradar.formats import _cell_date
+
+    header_idx, cols = next(
+        ((idx, c) for idx, c in enumerate(map(_hdfc_columns, rows)) if c),
+        (None, None),
+    )
+    if header_idx is None:
+        raise ValueError(
+            "Could not find HDFC's transaction table header (Date / Narration "
+            "/ Withdrawal Amt. / Deposit Amt. / Closing Balance) in this file."
+        )
+
+    txns = []
+    for row in rows[header_idx + 1:]:
+        if any("statement summary" in str(c).lower() for c in row):
+            break  # the totals below would read as a phantom transaction
+        get = lambda key: row[cols[key]] if key in cols and cols[key] < len(row) else None
+        txn_date = _cell_date(get("date")) if get("date") is not None else None
+        if txn_date is None:
+            continue
+        debit, credit = _amount(get("debit")), _amount(get("credit"))
+        if debit is None and credit is None:
+            continue
+        narration = str(get("narration") or "").strip()
+        t = make_transaction(txn_date, debit if debit is not None else credit,
+                             debit is not None, narration,
+                             balance=_amount(get("balance")), bank="HDFC")
+        if t.ref is None:
+            t.ref = _hdfc_ref(get("ref"))
+        txns.append(t)
+    if not txns:
+        # A silent empty list would audit as "Rs.0 owed" — say it failed.
+        raise ValueError(
+            "Found HDFC's transaction table but could not read any rows from "
+            "it (expected dd/mm/yy dates and Withdrawal/Deposit amounts). The "
+            "export layout may have changed."
+        )
+    return txns
+
+
+def _parse_bank_rows(rows: list[list]) -> list[Transaction]:
+    """Hand spreadsheet rows to the mapper for the bank layout they carry."""
+    if any(_hdfc_columns(row) for row in rows):
+        return parse_hdfc_rows(rows)
+    return parse_sbi_rows(rows)
+
+
 def parse_statement_file(
     path: str | Path, password: str | None = None
 ) -> list[Transaction]:
@@ -133,5 +235,5 @@ def parse_statement_file(
             return parse_generic_csv_text(text)
         except ValueError:
             rows = list(csv.reader(io.StringIO(text)))
-            return parse_sbi_rows(rows)
-    return parse_sbi_rows(load_rows(data, password=password))
+            return _parse_bank_rows(rows)
+    return _parse_bank_rows(load_rows(data, password=password))

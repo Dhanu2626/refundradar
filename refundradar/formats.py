@@ -52,7 +52,7 @@ def _cell_date(value, datemode=0):
         return xlrd.xldate_as_datetime(value, datemode).date()
     text = str(value).strip()
     for fmt in ("%d %b %Y", "%d-%m-%Y", "%d/%m/%Y", "%d %B %Y", "%Y-%m-%d",
-                "%d-%b-%Y", "%d-%b-%y"):
+                "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:
