@@ -40,9 +40,11 @@ def build_audit(
     transactions: list[Transaction],
     confirmed_failed_refs: set[str] | None = None,
     as_of: date | None = None,
+    confirmed_refunds: list[tuple[Transaction, Transaction]] | None = None,
 ) -> Audit:
     as_of = as_of or date.today()
-    incidents = reconcile(transactions, confirmed_failed_refs, as_of=as_of)
+    incidents = reconcile(transactions, confirmed_failed_refs, as_of=as_of,
+                          confirmed_refunds=confirmed_refunds)
     return Audit(incidents, as_of, statement_lines=len(transactions))
 
 

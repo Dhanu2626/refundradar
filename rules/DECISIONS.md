@@ -217,3 +217,26 @@ sharing a reference the user meant. Those incidents stay unclaimed until the use
 checks by hand; a pairing confirmation is future work. A claim still rests on the
 user's own "it failed": confirming a payment that went through is outside what a
 statement can catch (D6).
+
+## D13 — A refund the user matches by hand is evidence, bounded by that credit (2026-09-25)
+
+**Decision:** where the statement can't settle a pairing, the web app shows the
+candidates and lets the user pick one. That covers a reversal with several possible
+payments, a confirmed failure with several candidate credits, and a RETURN under a new
+reference. The pick reaches the reconciler as `confirmed_refunds` (payment, refund).
+It counts only if both rows are on the statement, the amounts match, the refund is on
+or after the payment, and neither row is picked twice. The payment is then ruled on
+time or late against that credit's date. Without a pick nothing is claimed ("Unable
+to conclusively match"), and the automatic passes behave exactly as before.
+
+**Why:** D12 left these as questions the UI could not answer: "Yes, it failed"
+confirms a reference, not which credit refunded which payment. The account holder is
+the only honest source for that link, the same evidence D6 already relies on for
+failures.
+
+**Risk:** a wrong pick misdates the claim. Because the claim stops at the chosen
+credit's date, a wrong pick under-claims when the payment was really never refunded.
+It overstates only if the user picks a refund for a payment that did not fail, which
+is outside what a statement can catch (as in D6). The UI offers only candidates the
+reconciler computed; the API re-checks the structure but not the candidate list, so a
+hand-built request is trusted like any confirmation.

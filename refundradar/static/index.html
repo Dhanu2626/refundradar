@@ -65,6 +65,15 @@
            border-radius: 8px; margin-bottom: 12px; display: none; }
   .hidden { display: none; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; text-align: center;
+            min-height: 1.3em; }
+  .verify { font-size: 13px; padding: 6px 10px; border-radius: 8px; margin-top: 8px;
+            background: var(--bg); color: var(--muted); }
+  .verify.caution { background: var(--amber-bg); color: var(--amber); }
+  .badge.unable { background: var(--amber-bg); color: var(--amber); }
+  .picks { width: 100%; padding-left: 20px; }
+  .picks .inc { border-top: 1px dashed var(--line); padding: 8px 0; }
+  .cards.five { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
 </style>
 </head>
 <body>
@@ -79,15 +88,38 @@
   <div class="card" id="screen-drop">
     <div class="drop" id="drop">
       <strong>Drop your bank statement here</strong> or click to choose a file
-      <p>CSV export with columns: Date, Narration, Ref, Debit, Credit, Balance</p>
-      <input type="file" id="file" accept=".csv" style="display:none">
+      <p>Generic CSV (Date, Narration, Ref, Debit, Credit, Balance), or an HDFC export:
+        .csv, .xls or .xlsx. HDFC reading is synthetically tested, not yet verified
+        against a real HDFC export.</p>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx" style="display:none">
     </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
     <div class="row" style="margin-top: 12px; justify-content: center;">
       <button id="demo-btn">Try with a demo statement</button>
     </div>
   </div>
 
   <div id="screen-audit" class="hidden">
+    <div class="card" id="statement-card">
+      <div class="row" style="justify-content: space-between;">
+        <div><strong id="st-name"></strong> <span class="badge info" id="st-format"></span></div>
+        <div class="hint" id="st-status" role="status" aria-live="polite"></div>
+      </div>
+      <div class="verify" id="st-verify"></div>
+      <div class="cards five">
+        <div class="stat"><div class="label">Transactions processed</div>
+          <div class="value" id="sum-txns">0</div></div>
+        <div class="stat"><div class="label">Refunds &amp; reversals found</div>
+          <div class="value" id="sum-found">0</div></div>
+        <div class="stat"><div class="label">Matched to a payment</div>
+          <div class="value" id="sum-matched">0</div></div>
+        <div class="stat"><div class="label">Need your confirmation</div>
+          <div class="value" id="sum-confirm">0</div></div>
+        <div class="stat"><div class="label">Unable to conclusively match</div>
+          <div class="value" id="sum-unable">0</div></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="hint" id="file-info"></div>
       <div class="cards">
@@ -99,6 +131,14 @@
           <div class="value" id="ontime">0</div></div>
       </div>
       <div id="incidents"></div>
+    </div>
+
+    <div class="card hidden" id="unmatched-card">
+      <h2>Unable to conclusively match</h2>
+      <p class="hint">These credits look like refunds or reversals, but nothing on the
+        statement ties them to one payment. If you know which payment one refunded,
+        pick it. Nothing is claimed until you do.</p>
+      <div id="unmatched"></div>
     </div>
 
     <div class="card" id="confirm-card">
@@ -133,9 +173,24 @@
 </div>
 
 <script>
-const state = { csv: null, confirmed: new Set(), fileName: "", packText: "" };
+const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
+                fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
+// statement text (narrations, references, file names) is data, never markup
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const day = (iso) => new Date(iso).toLocaleDateString("en-IN",
+  { day: "2-digit", month: "short", year: "numeric" });
+
+function setStatus(msg) { $("status").textContent = msg; $("st-status").textContent = msg; }
+
+// the statement as the server needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], pairs: state.pairs, ...extra };
+}
 
 function showError(msg) {
   const e = $("error"); e.textContent = msg; e.style.display = msg ? "block" : "none";
@@ -156,37 +211,87 @@ async function api(path, body) {
 
 async function runAudit() {
   showError("");
+  setStatus(`Auditing ${state.fileName}…`);
   try {
-    const res = await api("/api/audit", { csv: state.csv, confirmed: [...state.confirmed] });
+    const res = await api("/api/audit", payload());
     render(await res.json());
-  } catch (err) { showError(err.message); }
+    setStatus("Audit complete.");
+  } catch (err) {
+    // an unreadable statement gets no result at all, only the reason
+    $("screen-audit").classList.add("hidden");
+    $("screen-drop").classList.remove("hidden");
+    setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
+    showError(err.message);
+  }
+}
+
+function pickButton(pay, refund, label) {
+  return `<button class="pick" data-pay="${pay}" data-refund="${refund}">${label}</button>`;
+}
+
+function actionHtml(i) {
+  if (i.action === "confirm_failed")
+    return `<button data-ref="${esc(i.ref)}" class="confirm-yes">Yes, it failed</button>`;
+  if (i.action === "confirm_refund")
+    return pickButton(i.txn_id, i.refund_id, `Yes, the ${day(i.refund_date)} credit refunded it`);
+  return `<span class="badge unable">Unable to conclusively match</span>`;
+}
+
+function choices(i) {
+  if (i.action !== "choose_refund") return "";
+  return `<div class="picks">${i.candidates.map((c) => `<div class="inc"><div class="main">
+      <div class="title">${inr(c.amount)} came back &middot; ${day(c.date)}</div>
+      <div class="sub">${esc(c.narration)}</div></div>
+      ${pickButton(i.txn_id, c.txn_id, "This was the refund")}</div>`).join("")}</div>`;
+}
+
+function unmatchedRow(u) {
+  const r = u.refund;
+  const picks = u.candidates.map((c) => `<div class="inc"><div class="main">
+      <div class="title">${inr(c.amount)} paid &middot; ${day(c.date)}</div>
+      <div class="sub">${esc(c.narration)}</div></div>
+      ${pickButton(c.txn_id, r.txn_id, "This payment")}</div>`).join("") ||
+    `<p class="hint">No payment of this amount on this statement could be its origin.</p>`;
+  return `<div class="inc"><div class="main">
+      <div class="title">${inr(r.amount)} came back &middot; ${day(r.date)}</div>
+      <div class="sub">${esc(r.narration)}</div></div>
+      <span class="badge unable">Unable to conclusively match</span>
+      <div class="picks">${picks}</div></div>`;
 }
 
 function incidentRow(i) {
-  const when = new Date(i.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  let badge = "", sub = i.reason;
+  const when = day(i.date);
+  let badge = "", sub = esc(i.reason);
   if (i.time_barred)
     badge = `<span class="badge info">${inr(i.compensation_inr)} &mdash; older claim, not in total</span>`;
   else if (i.status === "refunded_late") badge = `<span class="badge late">${inr(i.compensation_inr)} owed</span>`;
   else if (i.status === "never_refunded") badge = `<span class="badge never">${inr(i.compensation_inr)} and counting</span>`;
   else if (i.status === "refunded_on_time") badge = `<span class="badge ok">On time</span>`;
   else if (i.status === "excluded_genuine_refund") badge = `<span class="badge info">Genuine refund &mdash; excluded</span>`;
-  else if (i.status === "needs_confirmation")
-    badge = `<button data-ref="${i.ref}" class="confirm-yes">Yes, it failed</button>`;
+  else if (i.status === "needs_confirmation") badge = actionHtml(i);
   else badge = `<span class="badge info">Outside 2019 circular</span>`;
-  const name = (i.channel_name || i.channel || "payment");
+  const name = esc(i.channel_name || i.channel || "payment");
   return `<div class="inc"><div class="main">
       <div class="title">${name} &middot; ${inr(i.amount)} &middot; ${when}</div>
-      <div class="sub">${sub}</div></div>${badge}</div>`;
+      <div class="sub">${sub}</div></div>${badge}${choices(i)}</div>`;
 }
 
 function render(data) {
-  const a = data.audit;
+  const a = data.audit, s = data.summary, st = data.statement;
   state.candidates = data.candidates;
   $("screen-drop").classList.add("hidden");
   $("screen-audit").classList.remove("hidden");
+  $("st-name").textContent = state.fileName;
+  $("st-format").textContent = st.format === "generic" ? "Generic CSV" : `${st.format} export`;
+  $("st-verify").textContent = st.verification;
+  $("st-verify").classList.toggle("caution", st.format === "HDFC");
+  $("sum-txns").textContent = s.transactions;
+  $("sum-found").textContent = s.refunds_found;
+  $("sum-matched").textContent = s.matched;
+  $("sum-confirm").textContent = s.needs_confirmation;
+  $("sum-unable").textContent = s.unable_to_match;
   $("file-info").innerHTML =
-    `&#128196; ${state.fileName} &middot; ${a.statement_lines} lines read &middot; ` +
+    `&#128196; ${esc(state.fileName)} &middot; ${a.statement_lines} lines read &middot; ` +
     `${a.incidents.length} findings &middot; audited as of ${a.as_of}`;
   $("owed").textContent = inr(a.total_owed_inr);
   $("stuck").textContent = inr(a.stuck_amount);
@@ -195,9 +300,18 @@ function render(data) {
                   refunded_on_time: 3, excluded_genuine_refund: 4, unsupported_channel: 5 };
   const sorted = [...a.incidents].sort((x, y) => order[x.status] - order[y.status]);
   $("incidents").innerHTML = sorted.map(incidentRow).join("") ||
-    `<p class="hint">No refund-related findings in this statement.</p>`;
+    `<p class="hint">${data.unmatched.length
+      ? "Nothing could be matched automatically; see the credits below."
+      : "No refund-related findings in this statement."}</p>`;
+  $("unmatched-card").classList.toggle("hidden", !data.unmatched.length);
+  $("unmatched").innerHTML = data.unmatched.map(unmatchedRow).join("");
   document.querySelectorAll(".confirm-yes").forEach((b) =>
     b.addEventListener("click", () => { state.confirmed.add(b.dataset.ref); runAudit(); }));
+  document.querySelectorAll(".pick").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.pairs.push([Number(b.dataset.pay), Number(b.dataset.refund)]);
+      runAudit();
+    }));
   renderCandidates("");
 }
 
@@ -211,8 +325,8 @@ function renderCandidates(q) {
     const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
     return `<div class="inc"><div class="main">
         <div class="title">${inr(c.amount)} &middot; ${when}</div>
-        <div class="sub">${c.narration}</div></div>
-        <button data-ref="${c.ref}" class="mark-failed">This payment failed</button></div>`;
+        <div class="sub">${esc(c.narration)}</div></div>
+        <button data-ref="${esc(c.ref)}" class="mark-failed">This payment failed</button></div>`;
   }).join("") || `<p class="hint" style="margin-top:8px">Type to search your payments.</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
     b.addEventListener("click", () => { state.confirmed.add(b.dataset.ref); runAudit(); }));
@@ -230,18 +344,32 @@ $("drop").addEventListener("drop", (e) => {
 $("file").addEventListener("change", (e) => { if (e.target.files.length) readFile(e.target.files[0]); });
 
 function readFile(f) {
+  showError("");
+  Object.assign(state, { csv: null, file: null, fileName: f.name,
+                         confirmed: new Set(), pairs: [] });
+  setStatus(`Reading ${f.name}…`);
   const reader = new FileReader();
-  reader.onload = () => { state.csv = reader.result; state.fileName = f.name;
-                          state.confirmed = new Set(); runAudit(); };
-  reader.readAsText(f);
+  reader.onload = () => { state.file = toBase64(reader.result); runAudit(); };
+  reader.onerror = () => { setStatus(`Could not read ${f.name}.`);
+                           showError("The browser could not read that file."); };
+  reader.readAsArrayBuffer(f);  // .xls and .xlsx are binary: send the bytes as they are
+}
+
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 }
 
 $("demo-btn").addEventListener("click", async () => {
   showError("");
   try {
     const data = await (await api("/api/demo")).json();
-    state.csv = data.csv; state.fileName = "demo_statement.csv (synthetic)";
-    state.confirmed = new Set(data.suggested_confirmed);
+    Object.assign(state, { csv: data.csv, file: null, pairs: [],
+                           fileName: "demo_statement.csv (synthetic)",
+                           confirmed: new Set(data.suggested_confirmed) });
     runAudit();
   } catch (err) { showError(err.message); }
 });
@@ -252,10 +380,8 @@ $("pack-btn").addEventListener("click", async () => {
         contact = $("c-contact").value.trim();
   if (!name || !last4 || !contact) { showError("Fill the three details for the letter first."); return; }
   try {
-    const res = await api("/api/complaint", {
-      csv: state.csv, confirmed: [...state.confirmed],
-      name, account_last4: last4, contact,
-    });
+    const res = await api("/api/complaint",
+                          payload({ name, account_last4: last4, contact }));
     state.packText = await res.text();
     $("pack").textContent = state.packText;
     $("pack").classList.remove("hidden");

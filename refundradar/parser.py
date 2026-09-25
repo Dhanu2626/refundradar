@@ -354,9 +354,15 @@ def parse_statement_file(
     path: str | Path, password: str | None = None
 ) -> list[Transaction]:
     """Open any supported statement file: CSV, xlsx, xls, or encrypted."""
+    return parse_statement_bytes(Path(path).read_bytes(), password=password)
+
+
+def parse_statement_bytes(
+    data: bytes, password: str | None = None
+) -> list[Transaction]:
+    """Read a statement from its raw bytes, in memory; see parse_statement_file."""
     from refundradar.formats import load_rows, sniff
 
-    data = Path(path).read_bytes()
     if sniff(data) == "text":
         text = data.decode("utf-8-sig", errors="replace")
         try:

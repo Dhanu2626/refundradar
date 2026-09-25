@@ -2,7 +2,7 @@
 
 ![Part of Dhanush Labs](https://img.shields.io/badge/PART_OF-DHANUSH_LABS-6366F1?style=flat-square&labelColor=0A0B0D)
 ![Status](https://img.shields.io/badge/STATUS-V0.9_BETA-14B8A6?style=flat-square&labelColor=0A0B0D)
-![Tests](https://img.shields.io/badge/TESTS-163_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
+![Tests](https://img.shields.io/badge/TESTS-183_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
 ![License](https://img.shields.io/badge/LICENSE-MIT-6366F1?style=flat-square&labelColor=0A0B0D)
 
 ### The Payments Auditor Your Bank Hopes You Never Run
@@ -38,7 +38,7 @@ python -m venv .venv
 .venv\Scripts\python -m refundradar serve
 ```
 
-Open `http://127.0.0.1:8626` → "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
+Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `.xls`, `.xlsx`), or "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
 
 ## Features
 
@@ -77,7 +77,7 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 refundradar/
 ├── refundradar/           parsing, reconciliation, RBI rule engine, complaint generator
 ├── rules/DECISIONS.md     every judgment call, written down
-├── tests/                 163 tests incl. planted-ground-truth reconciliation exam
+├── tests/                 183 tests incl. planted-ground-truth reconciliation exam
 └── CONTRIBUTING.md        how to add a bank parser
 ```
 
@@ -89,13 +89,13 @@ Python · pandas (statement parsing) · pytest
 
 | Statement format | Status |
 |---|---|
-| SBI Excel/CSV (incl. password-protected) | ✅ field-tested on a real statement |
-| HDFC Excel / Delimited export | 🧪 synthetic-tested — awaiting a real-statement field test |
+| SBI Excel/CSV (incl. password-protected; CLI) | ✅ field-tested on a real statement |
+| HDFC Excel / Delimited export (web app and CLI) | 🧪 synthetic-tested — awaiting a real-statement field test |
 | Generic CSV | ✅ |
 | Other banks | 🚧 in progress |
 | PDF statements | 🚧 planned |
 
-163 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
+183 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
 
 ## Future Improvements
 

@@ -20,7 +20,7 @@ settles one debit only.
 """
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from refundradar.model import Transaction, UNSUPPORTED_CHANNELS
@@ -55,6 +55,9 @@ class Incident:
     reason: str
     refund_date: date | None = None
     time_barred: bool = False  # set by the audit layer (DECISIONS.md, D8)
+    refund_txn: Transaction | None = None  # the credit behind refund_date
+    # a confirmed failure's competing credits, for the user to choose from
+    candidates: list[Transaction] = field(default_factory=list)
 
 
 def _language(narration: str) -> str:
@@ -116,6 +119,7 @@ def reconcile(
     transactions: list[Transaction],
     confirmed_failed_refs: set[str] | None = None,
     as_of: date | None = None,
+    confirmed_refunds: list[tuple[Transaction, Transaction]] | None = None,
 ) -> list[Incident]:
     confirmed = confirmed_failed_refs or set()
     debits = [t for t in transactions if t.is_debit]
@@ -127,17 +131,32 @@ def reconcile(
     is_confirmed = lambda d: bool(_ref_keys(d) & confirmed)
     shared = lambda d: any(holders[k] > 1 for k in _ref_keys(d))
 
+    # A refund the user matched to a payment by hand: their choice is the
+    # evidence, and the claim stops at that credit's date (DECISIONS.md, D13).
+    chosen: dict[int, Transaction] = {}
+    rows = {id(t) for t in transactions}
+    for d, c in confirmed_refunds or ():
+        if (id(d) in rows and id(c) in rows and d.is_debit and not c.is_debit
+                and d.amount == c.amount and c.txn_date >= d.txn_date
+                and id(d) not in chosen and id(c) not in used):
+            chosen[id(d)] = c
+            _take(c, credits, used)
+    open_debits = [d for d in debits if id(d) not in chosen]
+
     by_ref: dict[int, Transaction] = {}
-    _pair(credits, debits, lambda d, c: _ref_keys(d) & _ref_keys(c), by_ref, used)
+    _pair(credits, open_debits, lambda d, c: _ref_keys(d) & _ref_keys(c), by_ref, used)
     settled, unresolved = _settle_confirmed(
-        [d for d in debits if id(d) not in by_ref and is_confirmed(d)
+        [d for d in open_debits if id(d) not in by_ref and is_confirmed(d)
          and _supported(d) and not shared(d)],
         credits, used)
-    claimed = set(by_ref) | {id(d) for d in debits if is_confirmed(d)}
+    claimed = set(chosen) | set(by_ref) | {id(d) for d in debits if is_confirmed(d)}
     fallback = _fallback_match_reversals(debits, credits, claimed, used)
 
     incidents = []
     for d in debits:
+        if id(d) in chosen:
+            incidents.append(_chosen_refund(d, chosen[id(d)]))
+            continue
         match = by_ref.get(id(d))
         if match is not None:
             proven = any(holders[k] == 1 for k in _ref_keys(d) & _ref_keys(match))
@@ -146,6 +165,26 @@ def reconcile(
             incidents.append(_confirmed_failure(
                 d, shared(d), settled.get(id(d)), unresolved.get(id(d), []), as_of))
     return incidents + fallback
+
+
+def _chosen_refund(d: Transaction, c: Transaction) -> Incident:
+    """Classify a payment the user matched to its refund by hand (D13)."""
+    if not _supported(d):
+        return Incident(
+            d, UNSUPPORTED, None,
+            f"You matched a refund to this payment, but channel {d.channel!r} "
+            "is outside the 2019 TAT circular.",
+            refund_date=c.txn_date, refund_txn=c,
+        )
+    ruling = evaluate(d.channel, d.txn_date, c.txn_date)
+    return Incident(
+        d, ON_TIME if ruling.on_time else LATE, ruling,
+        f"You matched this payment to the credit of {c.txn_date.isoformat()} "
+        "as its refund, which came back "
+        + ("within the deadline." if ruling.on_time
+           else f"{ruling.days_late} days past the deadline."),
+        refund_date=c.txn_date, refund_txn=c,
+    )
 
 
 def _by_reference(d: Transaction, c: Transaction, confirmed: bool, proven: bool) -> Incident:
@@ -159,7 +198,7 @@ def _by_reference(d: Transaction, c: Transaction, confirmed: bool, proven: bool)
             "Money came back, but the wording says merchant refund "
             "(returned order), not a failed-transaction reversal — "
             "no compensation applies.",
-            refund_date=c.txn_date,
+            refund_date=c.txn_date, refund_txn=c,
         )
     if lang == "ambiguous":
         return Incident(
@@ -167,20 +206,20 @@ def _by_reference(d: Transaction, c: Transaction, confirmed: bool, proven: bool)
             "Money came back with the same reference, but the wording "
             "doesn't clearly say the original payment failed — "
             "confirm before claiming.",
-            refund_date=c.txn_date,
+            refund_date=c.txn_date, refund_txn=c,
         )
     if not _supported(d):
         return Incident(
             d, UNSUPPORTED, None,
             f"Reversal found, but channel {d.channel!r} is outside "
             "the 2019 TAT circular (see DECISIONS.md D2).",
-            refund_date=c.txn_date,
+            refund_date=c.txn_date, refund_txn=c,
         )
     ruling = evaluate(d.channel, d.txn_date, c.txn_date)
     if ruling.on_time:
         return Incident(d, ON_TIME, ruling,
                         "Failed transaction, reversed within the deadline.",
-                        refund_date=c.txn_date)
+                        refund_date=c.txn_date, refund_txn=c)
     if not (proven or confirmed):
         return Incident(
             d, CONFIRM, None,
@@ -188,12 +227,12 @@ def _by_reference(d: Transaction, c: Transaction, confirmed: bool, proven: bool)
             f"{ruling.days_late} days past the deadline, but other payments on "
             "this statement carry the same reference, so it doesn't prove "
             "which one failed — confirm before claiming.",
-            refund_date=c.txn_date,
+            refund_date=c.txn_date, refund_txn=c,
         )
     return Incident(
         d, LATE, ruling,
         f"Failed transaction, reversed {ruling.days_late} days past the deadline.",
-        refund_date=c.txn_date,
+        refund_date=c.txn_date, refund_txn=c,
     )
 
 
@@ -254,7 +293,7 @@ def _confirmed_failure(d, shared: bool, refund, candidates, as_of) -> Incident:
             "back " + ("within the deadline."
                        if ruling.on_time
                        else f"{ruling.days_late} days past the deadline."),
-            refund_date=refund.txn_date,
+            refund_date=refund.txn_date, refund_txn=refund,
         )
     if candidates:
         dates = ", ".join(c.txn_date.isoformat() for c in candidates[:3])
@@ -268,6 +307,8 @@ def _confirmed_failure(d, shared: bool, refund, candidates, as_of) -> Incident:
             "whether that was the refund, so nothing is claimed until you "
             "check.",
             refund_date=candidates[0].txn_date if len(candidates) == 1 else None,
+            refund_txn=candidates[0] if len(candidates) == 1 else None,
+            candidates=candidates,
         )
     ruling = evaluate(d.channel, d.txn_date, None, as_of=as_of)
     return Incident(
@@ -308,7 +349,7 @@ def _fallback_match_reversals(
                 d, ON_TIME, ruling,
                 "Reversal matched by amount and timing (your bank reverses with "
                 "a new reference) — completed within the deadline.",
-                refund_date=c.txn_date,
+                refund_date=c.txn_date, refund_txn=c,
             ))
         else:
             out.append(Incident(
@@ -317,7 +358,7 @@ def _fallback_match_reversals(
                 "past the deadline, but your bank issues reversals with a fresh "
                 "reference, so this link is inferred from amount and timing. "
                 "Confirm this pairing before claiming.",
-                refund_date=c.txn_date,
+                refund_date=c.txn_date, refund_txn=c,
             ))
     for c in sorted(reversals, key=lambda t: t.txn_date):
         if id(c) in used:
@@ -338,6 +379,41 @@ def _fallback_match_reversals(
             "matches it. If this payment failed, that was its refund, "
             f"{ruling.days_late} days past the deadline — confirm before "
             "claiming.",
-            refund_date=c.txn_date,
+            refund_date=c.txn_date, refund_txn=c,
         ))
+    return out
+
+
+def refund_like(c: Transaction) -> bool:
+    """Reversal wording, or a RETURN or failure word that stopped short of a
+    verdict (D11): a credit that may be some payment's refund."""
+    lang = _language(c.narration)
+    n = c.narration.upper()
+    return lang == "reversal" or (lang == "ambiguous" and (
+        RETURN_WORD in n or any(w in n for w in REVERSAL_WORDS)))
+
+
+def unmatched_refunds(
+    transactions: list[Transaction], incidents: list[Incident]
+) -> list[tuple[Transaction, list[Transaction]]]:
+    """Refund-like credits no incident accounts for, and the payments each
+    could belong to: same amount, on or before it, with no verdict yet.
+
+    Nothing here is ever claimed. Several candidates (a reversal beyond the
+    window with more than one possible origin) or a RETURN under a new
+    reference are cases the statement alone can't settle; a payment the user
+    picks becomes a confirmed refund (DECISIONS.md, D13).
+    """
+    linked = {_same_row(i.refund_txn) for i in incidents if i.refund_txn is not None}
+    linked |= {_same_row(c) for i in incidents for c in i.candidates}  # offered there
+    decided = {id(i.txn) for i in incidents}
+    out, seen = [], set()
+    for c in transactions:
+        if (c.is_debit or _same_row(c) in linked or _same_row(c) in seen
+                or not refund_like(c)):
+            continue
+        seen.add(_same_row(c))
+        out.append((c, [d for d in transactions
+                        if d.is_debit and id(d) not in decided and _supported(d)
+                        and d.amount == c.amount and d.txn_date <= c.txn_date]))
     return out
