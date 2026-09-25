@@ -49,10 +49,15 @@ def _cell_date(value, datemode=0):
         return value
     if isinstance(value, (int, float)) and value > 20000:
         import xlrd
-        return xlrd.xldate_as_datetime(value, datemode).date()
+        try:
+            return xlrd.xldate_as_datetime(value, datemode).date()
+        except (OverflowError, ValueError):
+            return None  # a number far too large to be a date
     text = str(value).strip()
     for fmt in ("%d %b %Y", "%d-%m-%Y", "%d/%m/%Y", "%d %B %Y", "%Y-%m-%d",
-                "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y"):
+                "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y",
+                "%d/%m/%y %H:%M", "%d/%m/%y %H:%M:%S",
+                "%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:

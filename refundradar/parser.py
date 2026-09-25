@@ -9,7 +9,7 @@ schema so nothing downstream cares where the data came from.
 import csv
 import io
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -183,12 +183,13 @@ def _set_hdfc_refs(t: Transaction, col_ref: str | None) -> None:
     t.alt_ref = col_ref
 
 
-def _hdfc_money(cell, row_no: int, column: str) -> Decimal | None:
-    """An HDFC amount cell: None when blank or zero, else a positive Decimal.
+def _hdfc_number(cell, row_no: int, column: str, *, signed: bool = False) -> Decimal | None:
+    """A numeric HDFC cell: None when blank, else a Decimal; anything else raises.
 
     Stricter than _amount on purpose: text such as "450.00 Cr" raises rather
     than reading as blank, because a row read as blank is a dropped row, and
-    the dropped row could be the refund.
+    the dropped row could be the refund. Amounts must be positive; a Closing
+    Balance may be negative (an overdraft).
     """
     text = "" if cell is None else str(cell).replace(",", "").replace("₹", "").strip()
     if text in ("", "-"):
@@ -197,25 +198,51 @@ def _hdfc_money(cell, row_no: int, column: str) -> Decimal | None:
         value = Decimal(text)
     except InvalidOperation:
         value = None
-    if value is None or not value.is_finite() or value < 0:
-        raise ValueError(
-            f"Row {row_no}: {column} amount {text!r} is not a plain positive "
-            "number, so it is unclear how much money moved."
-        )
-    return value or None
+    if value is None or not value.is_finite() or (value < 0 and not signed):
+        kind = "a plain number" if signed else "a plain positive number"
+        raise ValueError(f"Row {row_no}, {column}: {text!r} is not {kind}.")
+    return value
 
 
-def _balance_break(ledger: list[tuple[int, Decimal, Decimal | None]]) -> int | None:
-    """First row whose printed balance the rows before it don't reproduce."""
-    prev, moved = None, Decimal(0)
+def _balance_break(ledger) -> tuple[int, int, Decimal, Decimal] | None:
+    """(row, previous balance row, expected, printed) for the first printed
+    balance the rows before it don't reproduce, or None if all add up."""
+    prev, prev_row, moved = None, None, Decimal(0)
     for row_no, change, printed in ledger:
         moved += change
         if printed is None:
             continue
         if prev is not None and prev + moved != printed:
-            return row_no
-        prev, moved = printed, Decimal(0)
+            return row_no, prev_row, prev + moved, printed
+        prev, prev_row, moved = printed, row_no, Decimal(0)
     return None
+
+
+def _column_name(header: list, i: int) -> str:
+    name = str(header[i]).strip() if i < len(header) and header[i] is not None else ""
+    return name or f"column {i + 1}"
+
+
+def _refuse_rows_after_summary(rows: list[list], cols: dict, summary_idx: int) -> None:
+    """Nothing but totals may follow the summary: a second statement or
+    transactions pasted below it would otherwise never be read."""
+    from refundradar.formats import _cell_date
+
+    for idx in range(summary_idx + 1, len(rows)):
+        row = rows[idx]
+        cell = lambda key: row[cols[key]] if cols[key] < len(row) else None
+        if _hdfc_columns(row):
+            found = "another statement's header"
+        elif (isinstance(cell("date"), (str, date))  # numbers here are totals
+              and _cell_date(cell("date"))
+              and any(str(cell(k) or "").strip() not in ("", "-") for k in ("debit", "credit"))):
+            found = "a dated row with an amount"
+        else:
+            continue
+        raise ValueError(
+            f"Row {idx + 1}: {found} after the statement summary on row "
+            f"{summary_idx + 1}. Audit each HDFC export on its own."
+        )
 
 
 def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
@@ -227,9 +254,10 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
     space-padded and 0.00 in the unused amount column. Dates are dd/mm/yy.
 
     No real HDFC statement has been through this yet (DECISIONS.md, D10), so
-    it reads strictly: a row it can't account for stops the audit instead of
-    being skipped, and the rows must reproduce HDFC's own Closing Balance
-    column. A silently dropped row could be the very refund being audited.
+    it reads strictly: a row it can't account for stops the audit, naming
+    the row, column and cell, instead of being skipped, and the rows must
+    reproduce HDFC's own Closing Balance column. A silently dropped row
+    could be the very refund being audited.
     """
     from refundradar.formats import _cell_date
 
@@ -242,6 +270,8 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
             "Could not find HDFC's transaction table header (Date / Narration "
             "/ Withdrawal Amt. / Deposit Amt. / Closing Balance) in this file."
         )
+    header = rows[header_idx]
+    name = lambda key: _column_name(header, cols[key])
 
     txns = []
     ledger = []  # (row number, balance change, printed Closing Balance)
@@ -249,11 +279,7 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
         row, row_no = rows[idx], idx + 1
         cells = ["" if c is None else str(c).strip() for c in row]
         if any("statement summary" in c.lower() for c in cells):
-            if any(_hdfc_columns(r) for r in rows[idx + 1:]):
-                raise ValueError(
-                    f"Row {row_no}: another statement starts after this one's "
-                    "summary. Audit each HDFC export on its own."
-                )
+            _refuse_rows_after_summary(rows, cols, idx)
             break  # the totals below would read as a phantom transaction
         if not any(ch.isalnum() for c in cells for ch in c) or _hdfc_columns(row):
             continue  # blank row, asterisk separator, or the header repeated
@@ -262,21 +288,33 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
         txn_date = _cell_date(get("date")) if date_text else None
         if txn_date is None:
             raise ValueError(
-                f"Row {row_no}: has content but no dd/mm/yy date (found "
-                f"{date_text!r}). Stopping rather than skipping a row that "
-                "could be a payment or its refund."
+                f"Row {row_no}, {name('date')}: expected a dd/mm/yy date, found "
+                f"{date_text!r}. Stopping rather than skipping a row that could "
+                "be a payment or its refund."
             )
-        debit = _hdfc_money(get("debit"), row_no, "withdrawal")
-        credit = _hdfc_money(get("credit"), row_no, "deposit")
+        debit = _hdfc_number(get("debit"), row_no, name("debit")) or None
+        credit = _hdfc_number(get("credit"), row_no, name("credit")) or None
         if debit is not None and credit is not None:
             raise ValueError(
-                f"Row {row_no}: has both a withdrawal and a deposit amount, so "
-                "the direction of the money is unclear."
+                f"Row {row_no}: both {name('debit')} ({debit}) and "
+                f"{name('credit')} ({credit}) are filled, so the direction of "
+                "the money is unclear."
             )
-        balance = _amount(get("balance"))
+        balance = _hdfc_number(get("balance"), row_no, name("balance"), signed=True)
         if debit is None and credit is None:
+            # A dated line that moved no money, such as an opening balance, is
+            # only safe to pass over if no other column holds a stray amount.
+            for i, text in enumerate(cells):
+                other = _cell_date(row[i]) if text and i not in cols.values() else None
+                if text and i not in cols.values() and (
+                        other is None or abs((other - txn_date).days) > 31):
+                    raise ValueError(
+                        f"Row {row_no}, {_column_name(header, i)}: found {text!r} "
+                        f"on a row with no {name('debit')} or {name('credit')}; "
+                        "it may be an amount in the wrong column."
+                    )
             ledger.append((row_no, Decimal(0), balance))
-            continue  # a dated line that moved no money
+            continue
         narration = str(get("narration") or "").strip()
         t = make_transaction(txn_date, debit or credit, debit is not None,
                              narration, balance=balance, bank="HDFC")
@@ -293,12 +331,14 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
     # short statement pass by coincidence.
     dates = [t.txn_date for t in txns]
     newest_first = dates != sorted(dates) and dates == sorted(dates, reverse=True)
-    bad_row = _balance_break(ledger[::-1] if newest_first else ledger)
-    if bad_row is not None:
+    broken = _balance_break(ledger[::-1] if newest_first else ledger)
+    if broken is not None:
+        row_no, prev_row, expected, printed = broken
         raise ValueError(
-            f"Row {bad_row}: the Closing Balance doesn't follow from the rows "
-            "above it, so a row is missing, duplicated or misread. Stopping "
-            "rather than auditing a statement that doesn't add up."
+            f"Row {row_no}, {name('balance')}: the statement says {printed:,.2f}, "
+            f"but row {prev_row}'s balance and the rows between lead to "
+            f"{expected:,.2f}, so a row is missing, duplicated or misread. "
+            "Stopping rather than auditing a statement that doesn't add up."
         )
     return txns
 

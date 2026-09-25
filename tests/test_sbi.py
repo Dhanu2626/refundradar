@@ -109,14 +109,17 @@ def test_ordinary_same_amount_roundtrip_is_not_flagged():
 
 
 def test_reversal_outside_window_is_not_matched():
-    from refundradar.reconcile import reconcile
+    from refundradar.reconcile import CONFIRM, reconcile
     txns = [
         _sbi_txn(1, "500.00", True,
                  "WDL TFR UPI/DR/616128000004/LENSKART/Pay", "x"),
         _sbi_txn(20, "500.00", False,
                  "DEP TFR UPI/REF/616903000012/CR", "y"),  # 19 days > window
     ]
-    assert reconcile(txns) == []
+    # Not matched: nothing is claimed. Since D12 the only possible pairing is
+    # asked about instead of dropped, because it may be a late refund.
+    [inc] = reconcile(txns)
+    assert (inc.status, inc.ruling) == (CONFIRM, None)
 
 
 def test_sbi_csv_export_routes_to_sbi_mapper(tmp_path):

@@ -179,21 +179,23 @@ REVERSAL = _row("05/02/26", "UPI-SWIGGY-SWIGGY.ORDER@ICICI-ICIC0DC0099-603412345
                 "0000603412345678", deposit="450.00", balance="40,000.00")
 
 
-@pytest.mark.parametrize("row, problem", [
-    (_row("05-02-26", REVERSAL[1], deposit="450.00"), "no dd/mm/yy date"),
-    (_row("05/02/26 10:15", REVERSAL[1], deposit="450.00"), "no dd/mm/yy date"),
-    (_row("", REVERSAL[1], deposit="450.00"), "no dd/mm/yy date"),
-    (_row("05/02/26", REVERSAL[1], deposit="450.00 Cr"), "not a plain positive number"),
-    (_row("05/02/26", REVERSAL[1], deposit="(450.00)"), "not a plain positive number"),
-    (_row("05/02/26", REVERSAL[1], withdrawal="-450.00"), "not a plain positive number"),
-    (_row("05/02/26", REVERSAL[1], withdrawal="10.00", deposit="450.00"), "both a withdrawal and a deposit"),
-    (["", "NARRATION WRAPPED ONTO A SECOND LINE", "", "", "", "", ""], "no dd/mm/yy date"),
-], ids=["dd-mm-yy", "date+time", "blank date", "Cr suffix", "brackets", "negative",
-        "both amounts", "continuation line"])
-def test_unreadable_row_stops_the_audit_instead_of_vanishing(row, problem):
-    # each of these rows used to be skipped or misread without a word
-    with pytest.raises(ValueError, match=f"Row 3: .*{problem}"):
+# Per-defect reproductions live in test_regressions.py; these pin the error
+# contract: every refusal names the row, the column and the offending cell.
+@pytest.mark.parametrize("row, where, cell", [
+    (_row("05/02/26", REVERSAL[1], deposit="(450.00)"), "Deposit Amt.", "'(450.00)'"),
+    (_row("05/02/26", REVERSAL[1], deposit="450.00", balance="40,000.00 Cr"),
+     "Closing Balance", "'40000.00 Cr'"),
+    ([3.0e6, REVERSAL[1], "", "", "", "450.00", "40,000.00"], "Date", "'3000000.0'"),
+    (["", "NARRATION WRAPPED ONTO A SECOND LINE", "", "", "", "", ""], "Date", "''"),
+    (_row("05/02/26", "NOTE", balance="39,550.00")[:3] + ["SEE BRANCH"] + ["", "", "39,550.00"],
+     "Value Dt", "'SEE BRANCH'"),
+], ids=["bracketed amount", "Cr on balance", "number too big for a date",
+        "continuation line", "text where no amount is"])
+def test_refusal_names_row_column_and_cell(row, where, cell):
+    with pytest.raises(ValueError) as err:
         parse_hdfc_rows(_table(PAYMENT, row))
+    assert str(err.value).startswith(f"Row 3, {where}:")
+    assert cell in str(err.value)
 
 
 def test_blank_separator_and_repeated_header_rows_are_skipped():
@@ -201,43 +203,16 @@ def test_blank_separator_and_repeated_header_rows_are_skipped():
     assert len(txns) == 2
 
 
-def test_money_in_an_unmapped_column_is_caught_by_the_running_balance():
-    moved = _row("05/02/26", REVERSAL[1], "0000603412345678", balance="40,000.00")
-    moved[3] = "450.00"  # the amount landed in Value Dt; Closing Balance still rose
-    with pytest.raises(ValueError, match="Row 3: the Closing Balance"):
-        parse_hdfc_rows(_table(PAYMENT, moved))
-
-
-def test_duplicated_row_is_caught_by_the_running_balance():
-    with pytest.raises(ValueError, match="Row 3: the Closing Balance"):
-        parse_hdfc_rows(_table(PAYMENT, PAYMENT))
-
-
 def test_dated_row_without_money_is_skipped_but_still_balance_checked():
     opening = _row("01/02/26", "OPENING BALANCE", balance="40,000.00")
     assert len(parse_hdfc_rows(_table(opening, PAYMENT))) == 1
     wrong = _row("01/02/26", "OPENING BALANCE", balance="41,000.00")
-    with pytest.raises(ValueError, match="Row 3: the Closing Balance"):
+    with pytest.raises(ValueError, match="Row 3, Closing Balance: .*row 2's balance"):
         parse_hdfc_rows(_table(wrong, PAYMENT))
 
 
 def test_newest_first_export_balances_read_bottom_up():
     assert len(parse_hdfc_rows(_table(REVERSAL, PAYMENT))) == 2
-
-
-def test_totals_without_their_label_still_never_become_a_transaction():
-    labels = ["Opening Balance", "", "Dr Count", "Cr Count", "Debits", "Credits", "Closing Bal"]
-    totals = [40000.0, "", 1, 0, 450.0, 0.0, 39550.0]  # 40000.0 = Excel serial 6 Jul 2009
-    with pytest.raises(ValueError, match="Row 3: .*no dd/mm/yy date"):
-        parse_hdfc_rows(_table(PAYMENT, labels, totals))
-    with pytest.raises(ValueError, match="the Closing Balance"):
-        parse_hdfc_rows(_table(PAYMENT, totals))
-
-
-def test_a_second_statement_after_the_summary_is_refused():
-    rows = _table(PAYMENT, ["STATEMENT SUMMARY  :-"], HEADER, REVERSAL)
-    with pytest.raises(ValueError, match="another statement"):
-        parse_hdfc_rows(rows)
 
 
 # --- References: where the original payment's reference may reappear --------
@@ -290,13 +265,14 @@ def test_fresh_reference_reversal_in_window_is_asked_not_claimed():
     assert inc.status == CONFIRM  # linked by amount+timing only (D9)
 
 
-def test_fresh_reference_reversal_beyond_window_cannot_be_linked_from_the_statement():
-    # Known gap, pinned on purpose: nothing ties these rows together (D9).
+def test_fresh_reference_reversal_beyond_window_is_asked_then_settled():
+    # Nothing ties these rows together, so the statement alone only asks (D12)
     txns = parse_hdfc_rows(_table(LATE_DEBIT, _fresh_ref_reversal("23/02/26")))
-    assert reconcile(txns, as_of=date(2026, 4, 30)) == []
-    # Confirming the payment failed must still not call it never refunded (D12).
+    [asked] = reconcile(txns, as_of=date(2026, 4, 30))
+    assert (asked.status, asked.ruling) == (CONFIRM, None)
+    # "Yes, it failed": the only same-amount credit after it is that reversal
     [inc] = reconcile(txns, {"604112345678"}, as_of=date(2026, 4, 30))
-    assert inc.status == CONFIRM
+    assert (inc.status, inc.ruling.compensation_inr) == (LATE, 800)
 
 
 def test_unrecognised_reversal_wording_asks_instead_of_claiming_or_dropping():
@@ -316,5 +292,15 @@ def test_cli_reports_an_unreadable_statement_instead_of_a_total(tmp_path, capsys
         encoding="utf-8")
     assert main(["audit", str(f)]) == 1
     out = capsys.readouterr().out
-    assert "Could not audit hdfc.csv: Row 3" in out
+    assert "Could not audit hdfc.csv: Row 3, Deposit Amt.: '450.00 Cr'" in out
     assert "Total owed" not in out
+
+
+def test_cli_never_shows_a_traceback(tmp_path, capsys, monkeypatch):
+    import refundradar.__main__ as cli
+    def broken(*_, **__):
+        raise OverflowError("date value out of range")
+    monkeypatch.setattr(cli, "parse_statement_file", broken)
+    assert cli.main(["audit", str(tmp_path / "any.csv")]) == 1
+    out = capsys.readouterr().out
+    assert out == "Could not audit any.csv: OverflowError: date value out of range\n"

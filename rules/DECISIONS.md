@@ -124,75 +124,96 @@ React remains the right call if/when the UI outgrows one screen.
 ## D10 — HDFC is parsed strictly until a real export confirms its layout (2026-09-25)
 
 **Decision:** HDFC's Excel and Delimited exports are read from their publicly known
-layout, and strictly. Inside the transaction table, the only rows skipped are blank
-rows, asterisk separators, a repeated header and dated rows that move no money. Any
-other row stops the audit with its row number: content without a dd/mm/yy date, an
-amount that isn't a plain positive number, both amount columns filled. The parsed
-rows must also reproduce HDFC's own Closing Balance column, and a second statement
-after the summary is refused.
+layout, and strictly. Inside the transaction table the only rows passed over are
+blank rows, asterisk separators, a repeated header, and dated rows that move no money
+and hold nothing else but a nearby value date. Any other row stops the audit, and the
+error names the row, the column and the cell: a date that isn't dd/mm/yy (a time of
+day after it is fine), an amount or Closing Balance that isn't a plain number, both
+amount columns filled, a stray value where no amount is. The parsed rows must
+reproduce HDFC's own Closing Balance column, and nothing but totals may follow the
+STATEMENT SUMMARY: a second header or a dated row with an amount there is refused.
 
 **Why:** no real HDFC statement has been through the code. A lenient parser fails
 silently: a refund row it can't read disappears and the audit still prints a
-confident total. Adversarial probes (2026-09-25) showed nine such paths, from a
-"450.00 Cr" amount to a duplicated row. Stopping turns each wrong assumption into a
-visible, reportable error instead of a wrong number.
+confident total. Adversarial probes (2026-09-25) found twelve such paths, from a
+"450.00 Cr" amount to rows pasted below the summary. Stopping turns each wrong
+assumption into a visible, reportable error instead of a wrong number.
 
 **Evidence status:**
 - *Confirmed against real HDFC data:* nothing yet.
 - *Inferred from HDFC's published layouts, unverified:* the column names of both
   exports; dd/mm/yy dates; asterisk separators and the STATEMENT SUMMARY block; UPI
   narrations shaped `UPI-<name>-<VPA>-<IFSC>-<RRN>-<note>`; the Chq./Ref.No. column
-  holding the RRN left-padded with zeros; Closing Balance as a running balance in
-  printed order (oldest first unless the dates say otherwise).
+  holding the RRN left-padded with zeros, one reference per transaction; Closing
+  Balance as a plain running balance in printed order (oldest first unless the
+  dates say otherwise).
 - *Unknown, stood in for by the synthetic sample:* how HDFC words a failed-payment
   reversal; whether the reversal repeats the original RRN, and where (narration, ref
   column, both, neither); whether the .xls download is genuine BIFF or an HTML table;
   whether long narrations wrap onto continuation rows.
 
 **Risk:** the first real HDFC statement may stop on a row shape the parser has never
-seen. That is the intended failure; the fix belongs in `parse_hdfc_rows` with a
-synthetic test in that shape. Where the original reference reappears, the reversal
-is matched through either reference a row prints; if HDFC reverses under a fresh
-reference, only D9's 10-day fallback can find it. Matching on the ref column
-also assumes it identifies one transaction; if a real export shows it repeating
-across unrelated rows, those rows lose reference matching.
+seen, and every inferred rule above is a candidate. That is the intended failure; the
+fix belongs in `parse_hdfc_rows` with a synthetic test in that shape. A totals row
+that mimics a transaction (a first cell that reads as a date, one amount, and a
+balance that happens to add up) would still be read; the STATEMENT SUMMARY label and
+the labels row stop that in the layout we know. If the ref column repeats across
+unrelated rows, reference matching loses its proof value there (D12 then asks).
 
-## D11 — Wording that points both ways needs the user's confirmation (2026-09-25)
+## D11 — A verdict needs wording that points one way (2026-09-25)
 
-**Decision:** a credit whose narration carries both a refund word (REFUND, RETURN,
-CASHBACK) and a reversal word (REVERSAL, FAILED, …) is ambiguous. A same-reference
-match on it becomes `needs_confirmation`, not an excluded merchant refund.
+**Decision:** a credit counts as a merchant refund only when it says REFUND or
+CASHBACK and nothing about failure, and as a reversal only when it says REVERSAL,
+FAILED, NOT DISPENSED, UPI/REF, … and nothing about refunds or returns.
+"RETURNED TO SENDER" is a reversal phrase in its own right. Everything else, meaning
+both kinds of wording ("REFUND OF FAILED TXN"), a bare RETURN, or neither, is
+ambiguous: a same-reference match on it becomes `needs_confirmation`, and the user's
+"Yes, it failed" turns it into a reversal.
 
 **Why:** refund words used to win outright, so "REFUND OF FAILED TXN", a bank
-describing a failed payment coming back, was excluded as a returned order. The listed
-reversal phrase "RETURNED TO SENDER" could never fire at all, because it contains
-RETURN. Neither reading is safe to assume: excluding hides compensation owed, and
-claiming risks putting a merchant refund in the letter.
+describing a failed payment coming back, was excluded as a returned order, and the
+listed reversal phrase "RETURNED TO SENDER" could never fire because it contains
+RETURN. A bare RETURN is genuinely two-faced: a returned order, or a transfer
+returned unpaid. Neither reading is safe to assume: excluding hides compensation
+owed, claiming risks putting a merchant refund in the letter.
 
 **Risk:** more questions for the user. SBI's reversal marker "UPI/REF" also appears
 inside "UPI/REFUND", so a same-reference credit worded that way now asks instead of
-being excluded. A credit that says only RETURN, such as a hypothetical "IMPS
-RETURN", is still treated as a merchant refund. Revisit both with real narrations.
+being excluded. A bare-RETURN credit under a fresh reference is not asked about at
+all (too weak to link without a reference); it stays an explicit limitation.
 
-## D12 — A credit settles one debit; confirmed failures look for a fresh-reference reversal (2026-09-25)
+## D12 — Claim only what the statement proves; ask about the rest (2026-09-25)
 
-**Decision:** each matching pass gives a credit to exactly one debit: the closest
-earlier one that fits, never a debit an earlier pass already settled. A payment the
-user confirms failed, with no same-reference credit, takes a reversal-worded credit
-of the same amount within D9's window as its refund, claimed on time or late against
-that date. If the only such reversal is further away, the incident needs
-confirmation. `never_refunded` is claimed only when no such reversal exists.
+**Decision:**
+1. A credit settles one debit, the closest earlier one it fits; an exact copy of a
+   refund row counts as the same refund.
+2. A reference proves a link only if no other payment on the statement carries it. A
+   late reversal on a shared reference needs confirmation, and a confirmed payment
+   whose reference is shared is not claimed at all, because RefundRadar can't tell
+   which row the user meant.
+3. For a payment the user confirmed failed, with no same-reference credit, every
+   unexplained credit of the same amount on or after it is a candidate, whatever its
+   wording. Exactly one, reversal-worded and wanted by no other confirmed payment, is
+   its refund: claimed on time or late against that date, at any distance. No
+   candidate at all means never refunded. Anything else is a question listing the
+   candidates' dates.
+4. A reversal beyond D9's 10-day window with exactly one payment it could belong to
+   is asked about instead of dropped; with several, the statement can't say which.
 
-**Why:** adversarial probes (2026-09-25) found three wrong claims. A duplicated debit
-row with one reversal was claimed twice. A reference reused by two instalments gave
-the reversal to the older one and invented a Rs.1,900 late claim. And confirming a
-payment that came back under a fresh reference (SBI's normal behaviour, D9) claimed
-"never refunded": Rs.7,800 accruing to the audit date for money that was back on day
-2. The UI's "Yes, it failed" button on an inferred late pairing took exactly that path.
+**Why:** adversarial probes (2026-09-25) found wrong claims in the original matching
+and then in the first fixes. The original matching gave one reversal to two copies
+of a payment, gave a reused mandate reference's reversal to the wrong instalment,
+and called a payment refunded under a fresh reference (SBI's normal behaviour, D9)
+"never refunded": Rs.7,800 where at most Rs.100 was owed. The first fixes still
+fabricated a "never refunded" claim for a confirmed duplicate row (Rs.8,200 claimed,
+Rs.800 owed), claimed never-refunded for a refund worded like an ordinary transfer,
+and let two confirmed payments swap each other's refunds. Across 20 adversarial
+scenarios, claims above what is owed went 7 → 3 → 0.
 
-**Risk:** "closest earlier debit" can mis-pair two same-amount payments that share a
-reference, and a confirmed failure can take a nearby reversal that belonged to
-another payment. Both errors stop the claim at the reversal date, i.e. they
-under-claim, the direction D4 prefers. A distant reversal leaves the incident
-unclaimed until the user checks it by hand; the UI has no way to answer that
-question yet.
+**Risk:** every rule errs toward asking or under-claiming (D4), so some owed money
+waits on the user. Two questions have no answer in the UI yet: "Yes, it failed" can't
+say which of several candidate credits was the refund, or which of several rows
+sharing a reference the user meant. Those incidents stay unclaimed until the user
+checks by hand; a pairing confirmation is future work. A claim still rests on the
+user's own "it failed": confirming a payment that went through is outside what a
+statement can catch (D6).

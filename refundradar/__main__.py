@@ -61,6 +61,9 @@ def main(argv=None) -> int:
         except ValueError as e:
             print(f"Could not audit {args.file.name}: {e}")
             return 1
+        except Exception as e:  # never a traceback: say what failed, claim nothing
+            print(f"Could not audit {args.file.name}: {type(e).__name__}: {e}")
+            return 1
     elif args.cmd == "demo":
         truth = json.loads((SAMPLES / "ground_truth.json").read_text())
         confirmed = {i["ref"] for i in truth["incidents"]
