@@ -10,6 +10,7 @@ import csv
 import io
 import re
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from refundradar.model import Transaction, make_transaction
@@ -153,15 +154,68 @@ def _hdfc_columns(row: list) -> dict[str, int] | None:
 def _hdfc_ref(cell) -> str | None:
     """HDFC's Chq./Ref.No. cell as a reference, or None.
 
-    HDFC left-pads a 12-digit UPI/IMPS RRN to 16 digits (0000603412345678);
+    HDFC left-pads a 12-digit UPI/IMPS RRN with zeros (0000603412345678);
     unpadding lines it up with the same RRN quoted in another row's
-    narration. An all-zero cell means the row has no reference.
+    narration. The padding width is inferred, not confirmed, so any run of
+    zeros ahead of the last 12 digits is stripped. An all-zero cell means
+    the row has no reference.
     """
     ref = str(cell or "").strip()
     if not ref.strip("0"):
         return None
-    m = re.fullmatch(r"0000(\d{12})", ref)
+    m = re.fullmatch(r"0+(\d{12})", ref)
     return m.group(1) if m else ref
+
+
+def _set_hdfc_refs(t: Transaction, col_ref: str | None) -> None:
+    """Keep every reference an HDFC row prints, so either can match its pair.
+
+    make_transaction took t.ref from the narration. When Chq./Ref.No. says
+    something else, nothing on the statement tells which one a later
+    reversal will quote, so both become match keys. The column also takes
+    the display slot from a 16-character token guessed out of narration
+    text, but never from a 12-digit RRN.
+    """
+    if col_ref is None or col_ref == t.ref:
+        return
+    if t.ref is None or not t.ref.isdigit():
+        t.ref, col_ref = col_ref, t.ref
+    t.alt_ref = col_ref
+
+
+def _hdfc_money(cell, row_no: int, column: str) -> Decimal | None:
+    """An HDFC amount cell: None when blank or zero, else a positive Decimal.
+
+    Stricter than _amount on purpose: text such as "450.00 Cr" raises rather
+    than reading as blank, because a row read as blank is a dropped row, and
+    the dropped row could be the refund.
+    """
+    text = "" if cell is None else str(cell).replace(",", "").replace("₹", "").strip()
+    if text in ("", "-"):
+        return None
+    try:
+        value = Decimal(text)
+    except InvalidOperation:
+        value = None
+    if value is None or not value.is_finite() or value < 0:
+        raise ValueError(
+            f"Row {row_no}: {column} amount {text!r} is not a plain positive "
+            "number, so it is unclear how much money moved."
+        )
+    return value or None
+
+
+def _balance_break(ledger: list[tuple[int, Decimal, Decimal | None]]) -> int | None:
+    """First row whose printed balance the rows before it don't reproduce."""
+    prev, moved = None, Decimal(0)
+    for row_no, change, printed in ledger:
+        moved += change
+        if printed is None:
+            continue
+        if prev is not None and prev + moved != printed:
+            return row_no
+        prev, moved = printed, Decimal(0)
+    return None
 
 
 def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
@@ -172,8 +226,10 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
     block of totals. The Delimited export is the same table with every field
     space-padded and 0.00 in the unused amount column. Dates are dd/mm/yy.
 
-    Built from HDFC's known export layouts and synthetic samples; no real
-    HDFC statement has been through it yet (unlike SBI's field test).
+    No real HDFC statement has been through this yet (DECISIONS.md, D10), so
+    it reads strictly: a row it can't account for stops the audit instead of
+    being skipped, and the rows must reproduce HDFC's own Closing Balance
+    column. A silently dropped row could be the very refund being audited.
     """
     from refundradar.formats import _cell_date
 
@@ -188,29 +244,61 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
         )
 
     txns = []
-    for row in rows[header_idx + 1:]:
-        if any("statement summary" in str(c).lower() for c in row):
+    ledger = []  # (row number, balance change, printed Closing Balance)
+    for idx in range(header_idx + 1, len(rows)):
+        row, row_no = rows[idx], idx + 1
+        cells = ["" if c is None else str(c).strip() for c in row]
+        if any("statement summary" in c.lower() for c in cells):
+            if any(_hdfc_columns(r) for r in rows[idx + 1:]):
+                raise ValueError(
+                    f"Row {row_no}: another statement starts after this one's "
+                    "summary. Audit each HDFC export on its own."
+                )
             break  # the totals below would read as a phantom transaction
+        if not any(ch.isalnum() for c in cells for ch in c) or _hdfc_columns(row):
+            continue  # blank row, asterisk separator, or the header repeated
         get = lambda key: row[cols[key]] if key in cols and cols[key] < len(row) else None
-        txn_date = _cell_date(get("date")) if get("date") is not None else None
+        date_text = "" if get("date") is None else str(get("date")).strip()
+        txn_date = _cell_date(get("date")) if date_text else None
         if txn_date is None:
-            continue
-        debit, credit = _amount(get("debit")), _amount(get("credit"))
+            raise ValueError(
+                f"Row {row_no}: has content but no dd/mm/yy date (found "
+                f"{date_text!r}). Stopping rather than skipping a row that "
+                "could be a payment or its refund."
+            )
+        debit = _hdfc_money(get("debit"), row_no, "withdrawal")
+        credit = _hdfc_money(get("credit"), row_no, "deposit")
+        if debit is not None and credit is not None:
+            raise ValueError(
+                f"Row {row_no}: has both a withdrawal and a deposit amount, so "
+                "the direction of the money is unclear."
+            )
+        balance = _amount(get("balance"))
         if debit is None and credit is None:
-            continue
+            ledger.append((row_no, Decimal(0), balance))
+            continue  # a dated line that moved no money
         narration = str(get("narration") or "").strip()
-        t = make_transaction(txn_date, debit if debit is not None else credit,
-                             debit is not None, narration,
-                             balance=_amount(get("balance")), bank="HDFC")
-        if t.ref is None:
-            t.ref = _hdfc_ref(get("ref"))
+        t = make_transaction(txn_date, debit or credit, debit is not None,
+                             narration, balance=balance, bank="HDFC")
+        _set_hdfc_refs(t, _hdfc_ref(get("ref")))
         txns.append(t)
+        ledger.append((row_no, -t.amount if t.is_debit else t.amount, balance))
     if not txns:
-        # A silent empty list would audit as "Rs.0 owed" — say it failed.
         raise ValueError(
-            "Found HDFC's transaction table but could not read any rows from "
-            "it (expected dd/mm/yy dates and Withdrawal/Deposit amounts). The "
+            "Found HDFC's transaction table but no transactions in it. The "
             "export layout may have changed."
+        )
+    # Walk the rows oldest-first. Only the dates may say an export runs
+    # newest-first: accepting whichever direction adds up would let a
+    # short statement pass by coincidence.
+    dates = [t.txn_date for t in txns]
+    newest_first = dates != sorted(dates) and dates == sorted(dates, reverse=True)
+    bad_row = _balance_break(ledger[::-1] if newest_first else ledger)
+    if bad_row is not None:
+        raise ValueError(
+            f"Row {bad_row}: the Closing Balance doesn't follow from the rows "
+            "above it, so a row is missing, duplicated or misread. Stopping "
+            "rather than auditing a statement that doesn't add up."
         )
     return txns
 

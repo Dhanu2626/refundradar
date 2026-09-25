@@ -2,7 +2,7 @@
 
 ![Part of Dhanush Labs](https://img.shields.io/badge/PART_OF-DHANUSH_LABS-6366F1?style=flat-square&labelColor=0A0B0D)
 ![Status](https://img.shields.io/badge/STATUS-V0.9_BETA-14B8A6?style=flat-square&labelColor=0A0B0D)
-![Tests](https://img.shields.io/badge/TESTS-83_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
+![Tests](https://img.shields.io/badge/TESTS-127_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
 ![License](https://img.shields.io/badge/LICENSE-MIT-6366F1?style=flat-square&labelColor=0A0B0D)
 
 ### The Payments Auditor Your Bank Hopes You Never Run
@@ -77,7 +77,7 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 refundradar/
 ├── refundradar/           parsing, reconciliation, RBI rule engine, complaint generator
 ├── rules/DECISIONS.md     every judgment call, written down
-├── tests/                 83 tests incl. planted-ground-truth reconciliation exam
+├── tests/                 127 tests incl. planted-ground-truth reconciliation exam
 └── CONTRIBUTING.md        how to add a bank parser
 ```
 
@@ -95,7 +95,7 @@ Python · pandas (statement parsing) · pytest
 | Other banks | 🚧 in progress |
 | PDF statements | 🚧 planned |
 
-83 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
+127 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
 
 ## Future Improvements
 
