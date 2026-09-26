@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0b0d">
-<title>RefundRadar</title>
+<!-- The public demo page (docs/index.html) is built from this file by
+     tools/build_demo_page.py: it keeps everything here except the blocks between
+     demo-swap markers, which it replaces with versions that take no file. -->
+<!-- demo-swap:title --><title>RefundRadar</title><!-- /demo-swap:title -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
 <style>
@@ -377,6 +380,7 @@
       <li><span class="dot"><span>3</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>
         <div><b>Claim</b><small>Your complaint pack</small></div></li>
     </ol>
+    <!-- demo-swap:privacy -->
     <section class="privacy" aria-labelledby="privacy-h">
       <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Private by design</h2>
       <ul>
@@ -385,6 +389,7 @@
         <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Nothing doubtful is claimed without your answer.</li>
       </ul>
     </section>
+    <!-- /demo-swap:privacy -->
     <p class="side-foot">Applies RBI/2019-20/67 as code.</p>
   </aside>
 
@@ -398,6 +403,7 @@
       <p class="lede">When a digital payment fails, RBI requires your bank to reverse it on time,
         and to pay you compensation for every day it is late.
         <b>RefundRadar finds late refunds, asks about missing ones, and works out what you're owed.</b></p>
+      <!-- demo-swap:doorway -->
       <div class="drop" id="drop">
         <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
         <strong>Drop your bank statement here</strong>
@@ -415,6 +421,7 @@
         <button type="button" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Try with a demo statement</button>
         <p>See it work on synthetic data before you use your own statement.</p>
       </div>
+      <!-- /demo-swap:doorway -->
       <div class="features">
         <div class="feature"><span class="fi"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
           <b>Stays on this computer</b><p>No login. No signup. Your statement never leaves this computer.</p></div>
@@ -428,7 +435,7 @@
     <section id="screen-audit" class="hidden" aria-labelledby="audit-h">
       <div class="page-head">
         <div><p class="eyebrow">Audit results</p><h1 id="audit-h">Your refund audit</h1></div>
-        <button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button>
+        <!-- demo-swap:new --><button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button><!-- /demo-swap:new -->
       </div>
 
       <div class="card" id="statement-card">
@@ -488,6 +495,7 @@
 
       <section class="card" id="confirm-card" aria-labelledby="conf-h">
         <div class="sec-head"><h2 id="conf-h"><span class="h-ic tone-ask"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Did a payment fail that never came back?</h2></div>
+        <!-- demo-swap:confirm -->
         <p class="hint">The statement alone can't prove a failure that was never
           reversed &mdash; a failed payment looks identical to a successful one.
           Search the payment you remember and confirm it.</p>
@@ -495,12 +503,14 @@
         <div class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
           <input type="search" id="search" autocomplete="off" placeholder="Amount, name or date, e.g. 2499"></div>
         <div id="candidates"></div>
+        <!-- /demo-swap:confirm -->
       </section>
 
       <section class="card claim" id="claim-card" aria-labelledby="claim-h">
         <div class="sec-head"><h2 id="claim-h"><span class="h-ic tone-brand"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg></span>Generate the complaint pack</h2></div>
         <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
           citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
+        <!-- demo-swap:fields -->
         <div class="fields">
           <div class="field"><label for="c-name">Name as on the account</label>
             <input type="text" id="c-name" autocomplete="name" placeholder="A. Sample Customer"></div>
@@ -509,6 +519,7 @@
           <div class="field"><label for="c-contact">Email or phone for the reply</label>
             <input type="text" id="c-contact" placeholder="you@example.com"></div>
         </div>
+        <!-- /demo-swap:fields -->
         <p class="field-error hidden" id="pack-error" role="alert"></p>
         <div class="row">
           <button class="primary" id="pack-btn"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg>Generate complaint pack</button>
@@ -525,13 +536,14 @@
       </section>
     </section>
 
-    <footer class="foot"><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs 100% locally.</span>
+    <footer class="foot"><!-- demo-swap:footer --><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs 100% locally.</span><!-- /demo-swap:footer -->
       <span>Self-help tool, not legal advice &mdash; verify details before submitting any complaint.</span></footer>
   </div>
   </main>
 </div>
 
 <script>
+// The view: how a result looks. The public demo page runs this block unchanged.
 const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
                 fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
@@ -562,53 +574,12 @@ function setStage(stage) {
 
 function setStatus(msg) { $("status").textContent = msg; $("st-status").textContent = msg; }
 
-// the statement as the server needs it: CSV text, or the file's own bytes
-function payload(extra) {
-  const src = state.file !== null ? { file: state.file, filename: state.fileName }
-                                  : { csv: state.csv };
-  return { ...src, confirmed: [...state.confirmed], pairs: state.pairs, ...extra };
-}
-
 function showError(msg) {
   const e = $("error"); e.textContent = msg; e.style.display = msg ? "block" : "none";
 }
 
 function packError(msg) {
   $("pack-error").textContent = msg; $("pack-error").classList.toggle("hidden", !msg);
-}
-
-async function api(path, body) {
-  const res = await fetch(path, body === undefined ? {} : {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let detail = "Something went wrong.";
-    try { detail = (await res.json()).detail || detail; } catch (_) {}
-    throw new Error(detail);
-  }
-  return res;
-}
-
-async function runAudit() {
-  showError("");
-  setStatus(`Auditing ${state.fileName}…`);
-  document.body.classList.add("busy");
-  try {
-    const res = await api("/api/audit", payload());
-    render(await res.json());
-    setStatus("Audit complete.");
-  } catch (err) {
-    // an unreadable statement gets no result at all, only the reason
-    $("screen-audit").classList.add("hidden");
-    $("screen-drop").classList.remove("hidden");
-    setStage("upload");
-    setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
-    showError(err.message);
-    window.scrollTo(0, 0);
-  } finally {
-    document.body.classList.remove("busy");
-  }
 }
 
 function pickButton(pay, refund, label) {
@@ -710,7 +681,8 @@ function render(data) {
       state.pairs.push([Number(b.dataset.pay), Number(b.dataset.refund)]);
       runAudit();
     }));
-  renderCandidates($("search").value.trim().toLowerCase());
+  // the public demo page has no search box: it can't audit again
+  if ($("search")) renderCandidates($("search").value.trim().toLowerCase());
 }
 
 function renderCandidates(q) {
@@ -733,6 +705,70 @@ function renderCandidates(q) {
       $("search").value = "";  // that search is done; the payment is now a finding
       runAudit();
     }));
+}
+
+function showPack(text) {
+  state.packText = text;
+  $("pack").textContent = text;
+  $("pack").classList.remove("hidden");
+  $("download-btn").classList.remove("hidden");
+  $("pack-card").classList.remove("hidden");
+  setStage("claim");
+  $("pack-card").scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "start" });
+}
+
+$("download-btn").addEventListener("click", () => {
+  const blob = new Blob([state.packText], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "refundradar_complaint_pack.md";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+</script>
+<!-- demo-swap:io -->
+<script>
+// Reading your file and asking the local server; the public demo page has neither.
+
+// the statement as the server needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], pairs: state.pairs, ...extra };
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = "Something went wrong.";
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return res;
+}
+
+async function runAudit() {
+  showError("");
+  setStatus(`Auditing ${state.fileName}…`);
+  document.body.classList.add("busy");
+  try {
+    const res = await api("/api/audit", payload());
+    render(await res.json());
+    setStatus("Audit complete.");
+  } catch (err) {
+    // an unreadable statement gets no result at all, only the reason
+    $("screen-audit").classList.add("hidden");
+    $("screen-drop").classList.remove("hidden");
+    setStage("upload");
+    setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
+    showError(err.message);
+    window.scrollTo(0, 0);
+  } finally {
+    document.body.classList.remove("busy");
+  }
 }
 
 $("search").addEventListener("input", (e) => renderCandidates(e.target.value.trim().toLowerCase()));
@@ -786,28 +822,14 @@ $("pack-btn").addEventListener("click", async () => {
   try {
     const res = await api("/api/complaint",
                           payload({ name, account_last4: last4, contact }));
-    state.packText = await res.text();
-    $("pack").textContent = state.packText;
-    $("pack").classList.remove("hidden");
-    $("download-btn").classList.remove("hidden");
-    $("pack-card").classList.remove("hidden");
-    setStage("claim");
-    $("pack-card").scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "start" });
+    showPack(await res.text());
   } catch (err) { packError(err.message); }
   finally { document.body.classList.remove("busy"); }
-});
-
-$("download-btn").addEventListener("click", () => {
-  const blob = new Blob([state.packText], { type: "text/markdown" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "refundradar_complaint_pack.md";
-  a.click();
-  URL.revokeObjectURL(a.href);
 });
 
 $("reset-btn").addEventListener("click", () => location.reload());
 $("new-btn").addEventListener("click", () => location.reload());
 </script>
+<!-- /demo-swap:io -->
 </body>
 </html>

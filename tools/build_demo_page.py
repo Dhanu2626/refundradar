@@ -1,15 +1,21 @@
 """Generate the public demo page (docs/index.html) for GitHub Pages.
 
-Runs the REAL engine on the synthetic statement, freezes the result, and
-renders a single self-contained HTML file. The page has no backend and no
-file input by design — it can only ever show this synthetic result, so the
-"your statement never leaves your computer" promise cannot be violated here.
+The page is the web app's own page (refundradar/static/index.html): the same
+markup, styles and findings renderer, so the live demo looks and reads exactly
+like the app. The app marks the few blocks that must differ with demo-swap
+comments, and they are replaced here by versions that take no file. The page
+has no file input, no form and no network call: the one audit it can show is
+the app's own answer for the synthetic demo statement, frozen at build time,
+so the "your statement never leaves your computer" promise cannot be violated
+here.
 
-Re-run after any engine change:  python tools/build_demo_page.py
+Re-run after any engine or web app change:  python tools/build_demo_page.py
+(tests/test_demo_page.py fails while docs/index.html is out of date).
 """
 
 import html
 import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -17,195 +23,198 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from refundradar.audit import build_audit, to_dict
-from refundradar.complaint import generate_complaint_pack
-from refundradar.parser import parse_generic_csv
-SAMPLES = ROOT / "samples"
+from refundradar.webapp import (INDEX, AuditRequest, ComplaintRequest, audit_endpoint,
+                                complaint_endpoint, demo)
+
 DOCS = ROOT / "docs"
 AS_OF = date(2026, 7, 24)  # frozen so the demo numbers are stable
+SAMPLE = {"name": "A. Sample Customer", "account_last4": "2626",
+          "contact": "sample@example.com"}
+FILE_NAME = "demo_statement.csv (synthetic)"  # what the app calls its demo statement
 
 REPO_URL = "https://github.com/Dhanu2626/refundradar"
+RUN_IT = REPO_URL + "#how-it-works"
+
+SWAP = re.compile(r"<!-- demo-swap:(\w+) -->.*?<!-- /demo-swap:\1 -->", re.S)
+# what would let the page take a file or reach the network
+UPLOAD_SURFACE = ("<input", "<form", "fetch(", "xmlhttprequest", "websocket", "sendbeacon",
+                  "filereader", "<script src", "<iframe")
 
 
 def build_demo_data():
-    txns = parse_generic_csv(SAMPLES / "demo_statement.csv")
-    truth = json.loads((SAMPLES / "ground_truth.json").read_text())
-    confirmed = {i["ref"] for i in truth["incidents"]
-                 if i["is_incident"] and i["refund_date"] is None}
-    audit = build_audit(txns, confirmed, as_of=AS_OF)
-    pack = generate_complaint_pack(
-        audit, "A. Sample Customer", "2626", "sample@example.com")
-    return to_dict(audit), pack
+    """The app's answers for its own demo statement, as of AS_OF: the audit
+    response and the complaint pack for a sample customer."""
+    d = demo()
+    req = {"csv": d["csv"], "confirmed": d["suggested_confirmed"], "as_of": AS_OF.isoformat()}
+    data = audit_endpoint(AuditRequest(**req))
+    pack = complaint_endpoint(ComplaintRequest(**req, **SAMPLE))
+    # The page can't audit again, so it must never ask a question.
+    if data["unmatched"] or any(i["action"] != "none" for i in data["audit"]["incidents"]):
+        raise SystemExit("The demo statement now asks a question the static page can't "
+                         "answer. Change the demo statement, or give the page a way to answer.")
+    # It shows channel names, never codes, and has no search box: it carries
+    # neither the codes nor the statement's list of payments.
+    for i in data["audit"]["incidents"]:
+        if not i["channel_name"]:
+            raise SystemExit(f"No channel name for {i['ref']}: the demo would show a code.")
+        del i["channel"]
+    data["candidates"] = []
+    return data, pack
 
 
-def rupee(n) -> str:
-    return "₹" + f"{int(float(n)):,}"
+def rupees(n) -> str:
+    """Whole rupees in Indian digit grouping, as the app shows them (₹1,00,000)."""
+    digits = str(int(n))
+    head, groups = digits[:-3], [digits[-3:]]
+    while len(head) > 2:
+        head, groups = head[:-2], [head[-2:]] + groups
+    return "₹" + ",".join(([head] if head else []) + groups)
 
 
-STATUS_BADGE = {
-    "refunded_late": ("late", "{amt} owed"),
-    "never_refunded": ("never", "{amt} and counting"),
-    "refunded_on_time": ("ok", "On time"),
-    "excluded_genuine_refund": ("info", "Genuine refund — excluded"),
-    "needs_confirmation": ("info", "Needs your confirmation"),
-    "unsupported_channel": ("info", "Outside the 2019 circular"),
-}
-STATUS_ORDER = {"refunded_late": 0, "never_refunded": 1, "needs_confirmation": 2,
-                "refunded_on_time": 3, "excluded_genuine_refund": 4,
-                "unsupported_channel": 5}
-CHANNEL_NAMES = {
-    "upi_p2m": "UPI person-to-merchant", "upi_p2p": "UPI person-to-person",
-    "imps": "IMPS", "atm": "ATM / Micro-ATM cash withdrawal", "pos": "PoS card",
-    "ecom": "Card / e-commerce", "nach": "NACH mandate",
-}
+def icon(name: str) -> str:
+    return f'<svg class="ic" aria-hidden="true"><use href="#i-{name}"/></svg>'
 
 
-def incident_rows(audit: dict) -> str:
-    rows = []
-    for i in sorted(audit["incidents"], key=lambda x: STATUS_ORDER[x["status"]]):
-        cls, tmpl = STATUS_BADGE[i["status"]]
-        amt = rupee(i["compensation_inr"]) if i["compensation_inr"] else ""
-        badge = tmpl.format(amt=amt)
-        name = (i["channel_name"] or CHANNEL_NAMES.get(i["channel"])
-                or i["channel"] or "payment")
-        d = date.fromisoformat(i["date"]).strftime("%d %b %Y")
-        rows.append(
-            f'<div class="inc"><div class="main">'
-            f'<div class="title">{html.escape(name)} · {rupee(i["amount"])} · {d}</div>'
-            f'<div class="sub">{html.escape(i["reason"])}</div></div>'
-            f'<span class="badge {cls}">{html.escape(badge)}</span></div>'
-        )
-    return "\n".join(rows)
+def demo_parts(data: dict, pack: str, confirmed: list) -> dict:
+    """The page's own version of each block the app marks with demo-swap."""
+    a = data["audit"]
+    as_of = date.fromisoformat(a["as_of"]).strftime("%d %b %Y")
+    shown = any(i["ref"] in confirmed for i in a["incidents"])
+    blob = json.dumps({"file_name": FILE_NAME, "response": data, "pack": pack,
+                       "confirmed": confirmed}, ensure_ascii=False)
+    sample = {k: html.escape(v) for k, v in SAMPLE.items()}
+    return {
+        "title": """<title>RefundRadar — the payments auditor your bank hopes you never run</title>
+<meta name="description" content="RBI requires your bank to pay you Rs.100/day for late refunds on failed payments, automatically. Almost nobody checks. RefundRadar does.">""",
+        "privacy": f"""<section class="privacy" aria-labelledby="privacy-h">
+      <h2 id="privacy-h">{icon("shield")}Live demo</h2>
+      <ul>
+        <li>{icon("check")}A synthetic statement. No real account.</li>
+        <li>{icon("check")}This page can't take a file, and sends nothing anywhere.</li>
+        <li>{icon("check")}The app itself runs on your own computer.</li>
+      </ul>
+    </section>""",
+        "doorway": f"""<div class="drop demo">
+        <div class="up">{icon("play")}</div>
+        <strong>Run a real audit on a sample statement</strong>
+        <p class="or">It finds the {rupees(a["total_owed_inr"])} a bank owes this made-up customer, and shows its work.</p>
+        <div class="formats"><span class="chip">Synthetic data</span>
+          <span class="chip">{a["statement_lines"]} transactions</span><span class="chip">As of {as_of}</span></div>
+        <p class="note">This page can't take a file: it has no upload, and nothing you do here
+          leaves your browser. To audit your own statement,
+          <a href="{RUN_IT}">run RefundRadar on your computer</a>.</p>
+        <button type="button" class="primary choose" id="demo-btn">{icon("play")}Run the demo audit</button>
+      </div>
+      <noscript><p class="error" style="display:block">This demo needs JavaScript to show the audit.</p></noscript>
+      <div class="status" id="status" role="status" aria-live="polite"></div>""",
+        "new": f'<a class="button ghost" href="{RUN_IT}">Audit your own statement</a>',
+        "confirm": """<p class="hint">The statement alone can't prove a failure that was never
+          reversed &mdash; a failed payment looks identical to a successful one.
+          In the app, you search the payment you remember and confirm it.</p>"""
+        + ("""
+        <p class="verify">This demo confirmed one for you: <b id="demo-confirmed"></b>.
+          It is the &ldquo;Still missing&rdquo; finding above.</p>""" if shown else ""),
+        "fields": f"""<div class="fields">
+          <div class="field"><span class="ro-label">Name as on the account</span><div class="ro">{sample["name"]}</div></div>
+          <div class="field"><span class="ro-label">Account last 4 digits</span><div class="ro">{sample["account_last4"]}</div></div>
+          <div class="field"><span class="ro-label">Email or phone for the reply</span><div class="ro">{sample["contact"]}</div></div>
+        </div>
+        <p class="hint">The demo fills these in for a sample customer. In the app, you type
+          your own, and they go only into the letter.</p>""",
+        "footer": "<span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This demo reads a "
+                  "synthetic statement; the app runs 100% on your computer.</span>",
+        # "<" escaped: the statement's text can never close the script element
+        "io": ('<script type="application/json" id="demo-data">'
+               + blob.replace("<", "\\u003c") + "</script>\n" + DEMO_SCRIPT),
+    }
 
 
-def render(audit: dict, pack: str) -> str:
-    return TEMPLATE.format(
-        owed=rupee(audit["total_owed_inr"]),
-        stuck=rupee(audit["stuck_amount"]),
-        ontime=audit["on_time_count"],
-        lines=audit["statement_lines"],
-        as_of=date.fromisoformat(audit["as_of"]).strftime("%d %b %Y"),
-        incidents=incident_rows(audit),
-        pack=html.escape(pack),
-        repo=REPO_URL,
-    )
+DEMO_SCRIPT = """<script>
+// The public demo, built by tools/build_demo_page.py: what the app answers for its
+// demo statement, frozen into this page. It has no file input, no form and no
+// network call, so it can never receive a statement.
+const DEMO = JSON.parse($("demo-data").textContent);
 
+$("demo-btn").addEventListener("click", () => {
+  showError("");
+  state.fileName = DEMO.file_name;
+  render(DEMO.response);
+  const note = $("demo-confirmed");
+  if (note) note.textContent = DEMO.response.audit.incidents
+    .filter((i) => DEMO.confirmed.includes(i.ref))
+    .map((i) => `${i.channel_name} · ${inr(i.amount)} · ${day(i.date)}`).join("; ");
+  setStatus("Audit complete.");
+});
 
-TEMPLATE = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RefundRadar — the payments auditor your bank hopes you never run</title>
-<meta name="description" content="RBI requires your bank to pay you Rs.100/day for late refunds on failed payments, automatically. Almost nobody checks. RefundRadar does.">
-<style>
-  :root {{
-    --bg:#f7f6f3; --card:#fff; --ink:#1a1a18; --muted:#6b6a64; --line:#e4e2db;
-    --red-bg:#fceaea; --red:#a32d2d; --red-dark:#791f1f; --amber-bg:#faeeda;
-    --amber:#854f0b; --green-bg:#eaf3de; --green:#3b6d11; --accent:#185fa5; --radius:10px;
-  }}
-  * {{ box-sizing:border-box; margin:0; }}
-  body {{ font-family:"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--ink);
-         line-height:1.6; padding:0 16px 60px; }}
-  .wrap {{ max-width:820px; margin:0 auto; }}
-  .banner {{ background:#eef4fb; border-bottom:1px solid #d6e3f2; color:#0c447c;
-            text-align:center; font-size:13px; padding:8px 12px; margin:0 -16px 24px; }}
-  header.hero {{ text-align:center; padding:28px 0 8px; }}
-  .brand {{ font-size:30px; font-weight:600; }}
-  .brand span {{ color:var(--accent); }}
-  .tag {{ font-size:17px; color:var(--muted); max-width:600px; margin:10px auto 0; }}
-  .arrow {{ color:var(--muted); font-size:13px; margin:16px 0 0; }}
-  .card {{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-          padding:22px; margin:16px 0; }}
-  .demo-label {{ display:inline-block; font-size:12px; background:var(--amber-bg); color:var(--amber);
-                padding:3px 10px; border-radius:999px; margin-bottom:12px; }}
-  .fileinfo {{ font-size:13px; color:var(--muted); margin-bottom:14px; }}
-  .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:6px 0 16px; }}
-  .stat {{ border-radius:var(--radius); padding:14px 16px; background:var(--bg); }}
-  .stat .label {{ font-size:13px; color:var(--muted); }}
-  .stat .value {{ font-size:28px; font-weight:600; }}
-  .stat.owed {{ background:var(--red-bg); }} .stat.owed .label {{ color:var(--red); }}
-  .stat.owed .value {{ color:var(--red-dark); }}
-  .inc {{ display:flex; gap:12px; padding:13px 4px; border-top:1px solid var(--line); align-items:center; flex-wrap:wrap; }}
-  .inc .main {{ flex:1; min-width:220px; }} .inc .title {{ font-size:15px; }}
-  .inc .sub {{ font-size:13px; color:var(--muted); }}
-  .badge {{ font-size:12px; padding:3px 10px; border-radius:999px; white-space:nowrap; }}
-  .badge.late {{ background:var(--red-bg); color:var(--red); }}
-  .badge.never {{ background:var(--amber-bg); color:var(--amber); }}
-  .badge.ok {{ background:var(--green-bg); color:var(--green); }}
-  .badge.info {{ background:var(--bg); color:var(--muted); }}
-  h2 {{ font-size:19px; margin:8px 0 10px; font-weight:600; }}
-  .steps {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; }}
-  .step {{ font-size:14px; }} .step b {{ display:block; font-size:15px; margin-bottom:3px; }}
-  .step .n {{ display:inline-block; width:24px; height:24px; line-height:24px; text-align:center;
-             border-radius:50%; background:var(--accent); color:#fff; font-size:13px; margin-bottom:6px; }}
-  details {{ margin-top:8px; }} summary {{ cursor:pointer; color:var(--accent); font-size:14px; }}
-  pre {{ white-space:pre-wrap; background:var(--bg); border-radius:var(--radius); padding:16px;
-        font-size:12.5px; max-height:380px; overflow:auto; margin-top:12px; }}
-  .cta {{ text-align:center; }}
-  .btn {{ display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
-         padding:11px 22px; border-radius:8px; font-size:15px; margin-top:6px; }}
-  .trust {{ font-size:14px; color:var(--muted); margin-top:10px; }}
-  footer {{ text-align:center; color:var(--muted); font-size:12px; margin-top:30px; }}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="banner">Live demo with <b>synthetic data</b>. This page can't take a file — the real app runs on your own computer.</div>
+$("pack-btn").addEventListener("click", () => { showError(""); showPack(DEMO.pack); });
+$("reset-btn").addEventListener("click", () => location.reload());
 
-  <header class="hero">
-    <div class="brand">Refund<span>Radar</span></div>
-    <p class="tag">When a digital payment fails in India, RBI requires your bank to refund it on time
-      <b>and pay you ₹100 for every day it's late — automatically, without you asking.</b>
-      Almost nobody checks whether the bank actually did. RefundRadar checks.</p>
-    <p class="arrow">↓ Here's a real audit of a sample statement</p>
-  </header>
+// a file dropped here is never read: say so, rather than let the browser open it
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  showError("This live demo can't take a file, and it didn't read that one. " +
+            "To audit your own statement, run RefundRadar on your computer.");
+  window.scrollTo(0, 0);
+});
+</script>"""
 
-  <div class="card">
-    <span class="demo-label">Sample statement · synthetic</span>
-    <div class="fileinfo">📄 {lines} transactions read · audited as of {as_of}</div>
-    <div class="cards">
-      <div class="stat owed"><div class="label">The bank owes this customer</div><div class="value">{owed}</div></div>
-      <div class="stat"><div class="label">Stuck refunds</div><div class="value">{stuck}</div></div>
-      <div class="stat"><div class="label">Refunds on time</div><div class="value">{ontime}</div></div>
-    </div>
-    {incidents}
-    <details>
-      <summary>See the complaint pack it generates →</summary>
-      <pre>{pack}</pre>
-    </details>
-  </div>
-
-  <div class="card">
-    <h2>How it works</h2>
-    <div class="steps">
-      <div class="step"><span class="n">1</span><b>Read</b>Your bank statement export, on your own computer.</div>
-      <div class="step"><span class="n">2</span><b>Reconcile</b>Finds failed payments whose refund came late or never.</div>
-      <div class="step"><span class="n">3</span><b>Claim</b>Computes what you're owed and writes the complaint letter.</div>
-    </div>
-  </div>
-
-  <div class="card cta">
-    <h2>Run it on your own statement</h2>
-    <p class="trust">The full app runs entirely on your machine — no signup, no upload, no server.
-      Your statement never leaves your computer. This demo page has no way to receive a file at all.</p>
-    <a class="btn" href="{repo}">Get it on GitHub</a>
-  </div>
-
-  <footer>RefundRadar · applies RBI/2019-20/67 as code · self-help tool, not legal advice —
-    verify details before submitting any complaint.</footer>
-</div>
-</body>
-</html>
+BANNER = f"""<div class="demo-bar"><span class="pill">Live demo</span><span>Synthetic statement &middot;
+  this page can't take a file &middot; <a href="{REPO_URL}">Get RefundRadar on GitHub</a></span></div>
 """
+
+DEMO_CSS = """
+  /* the public demo's few rules of its own; everything else is the app's */
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+              gap: 4px 10px; min-height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--line);
+              background: #0d1b1b; color: var(--ink-2); font-size: 13px; text-align: center; }
+  .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
+                    color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
+                    letter-spacing: .06em; text-transform: uppercase; }
+  .demo-bar a, .drop.demo a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .shell { min-height: calc(100vh - 40px); }
+  @media (min-width: 1024px) { .side { height: calc(100vh - 40px); } }
+  .drop.demo, .drop.demo:hover { cursor: default; border-style: solid;
+                                 border-color: rgba(45, 212, 191, .3); }
+  a.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+             min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
+             color: var(--ink); font-size: 14.5px; font-weight: 600; text-decoration: none;
+             transition: background-color .15s, border-color .15s; }
+  a.button:hover { background: var(--surface-2); border-color: #414856; }
+  .ro-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600;
+              color: var(--ink-2); }
+  .ro { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-2);
+        background: var(--bg); color: var(--ink-2); overflow-wrap: anywhere; }
+"""
+
+
+def render(data: dict, pack: str) -> str:
+    """The app's page with its demo-swap blocks replaced: the public demo."""
+    page = INDEX.read_text(encoding="utf-8")
+    parts = demo_parts(data, pack, demo()["suggested_confirmed"])
+    marked = SWAP.findall(page)
+    if sorted(marked) != sorted(parts):
+        raise SystemExit(f"{INDEX.name} marks the demo-swap blocks {sorted(marked)}; "
+                         f"this build replaces {sorted(parts)}. Make them agree.")
+    page = SWAP.sub(lambda m: parts[m.group(1)], page)
+    for anchor, added in (("</head>", f"<style>{DEMO_CSS}</style>\n</head>"),
+                          ('<div class="shell">', BANNER + '<div class="shell">')):
+        if page.count(anchor) != 1:
+            raise SystemExit(f"{INDEX.name} no longer has exactly one {anchor!r}.")
+        page = page.replace(anchor, added)
+    found = [s for s in UPLOAD_SURFACE if s in page.lower()]
+    if found:
+        raise SystemExit(f"The demo page would contain {found}: it must not take a file.")
+    return page
 
 
 def main():
     DOCS.mkdir(exist_ok=True)
-    audit, pack = build_demo_data()
-    (DOCS / "index.html").write_text(render(audit, pack), encoding="utf-8")
+    data, pack = build_demo_data()
+    (DOCS / "index.html").write_text(render(data, pack), encoding="utf-8", newline="\n")
     (DOCS / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"Wrote {DOCS / 'index.html'} — demo shows {rupee(audit['total_owed_inr'])} owed")
+    print(f"Wrote {DOCS / 'index.html'}: the app's page, showing "
+          f"{rupees(data['audit']['total_owed_inr'])} owed as of {AS_OF}")
 
 
 if __name__ == "__main__":

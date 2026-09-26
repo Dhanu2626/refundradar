@@ -25,7 +25,9 @@ fake references) and test against that. Real data stays on your machine, always.
 4. Check whether the bank ties a reversal to the original payment by reference. Some (SBI)
    issue reversals under a **fresh** reference — if so, the amount+timing fallback in
    [`refundradar/reconcile.py`](refundradar/reconcile.py) is what catches it.
-5. Run `python -m pytest -q` and open a pull request.
+5. Run `python -m pytest -q` and open a pull request. If you changed the web page or what
+   the engine finds, also run `python tools/build_demo_page.py`: `docs/index.html` is the
+   live demo, built from the app's own page, and a test fails while it is out of date.
 
 ## Ground rules
 
