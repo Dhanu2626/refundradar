@@ -4,6 +4,8 @@ statements/
 *.csv
 *.xlsx
 *.xls
+*.txt
+!requirements*.txt
 
 # Synthetic/demo data is the only allowed data
 !samples/**

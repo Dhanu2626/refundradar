@@ -38,6 +38,7 @@ class Transaction:
     channel: str | None = None  # rbi_tat.yaml code, or neft/rtgs, or None
     balance: Decimal | None = None
     bank: str = ""
+    alt_ref: str | None = None  # a second reference on the same line, also matched
 
 
 def detect_channel(narration: str) -> str | None:
