@@ -200,8 +200,11 @@ def _hdfc_number(cell, row_no: int, column: str, *, signed: bool = False) -> Dec
         value = None
     if value is None or not value.is_finite() or (value < 0 and not signed):
         kind = "a plain number" if signed else "a plain positive number"
-        raise ValueError(f"Row {row_no}, {column}: {text!r} is not {kind}.")
-    return value
+        raise ValueError(f"Row {row_no}, {column}: {str(cell).strip()!r} is not {kind}.")
+    # a spreadsheet number cell arrives as a float (2000.0): state it in paise,
+    # but never round a value that carries more decimals than that
+    paise = Decimal(f"{value:.2f}")
+    return paise if paise == value else value
 
 
 def _balance_break(ledger) -> tuple[int, int, Decimal, Decimal] | None:

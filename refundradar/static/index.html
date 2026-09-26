@@ -709,7 +709,7 @@ function render(data) {
       state.pairs.push([Number(b.dataset.pay), Number(b.dataset.refund)]);
       runAudit();
     }));
-  renderCandidates("");
+  renderCandidates($("search").value.trim().toLowerCase());
 }
 
 function renderCandidates(q) {
@@ -724,12 +724,17 @@ function renderCandidates(q) {
         <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}</div>
         <div class="sub narr">${esc(c.narration)}</div></div>
         <div class="act"><button data-ref="${esc(c.ref)}" class="mark-failed ask">This payment failed</button></div></div>`;
-  }).join("") || `<p class="empty">Type to search your payments.</p>`;
+  }).join("") || `<p class="empty">${q ? `No payment matches &ldquo;${esc(q)}&rdquo;.`
+                                       : "Type to search your payments."}</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
-    b.addEventListener("click", () => { state.confirmed.add(b.dataset.ref); runAudit(); }));
+    b.addEventListener("click", () => {
+      state.confirmed.add(b.dataset.ref);
+      $("search").value = "";  // that search is done; the payment is now a finding
+      runAudit();
+    }));
 }
 
-$("search").addEventListener("input", (e) => renderCandidates(e.target.value.toLowerCase()));
+$("search").addEventListener("input", (e) => renderCandidates(e.target.value.trim().toLowerCase()));
 
 $("drop").addEventListener("click", () => $("file").click());
 $("drop").addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("over"); });

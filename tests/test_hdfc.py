@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from refundradar.parser import _hdfc_ref, parse_hdfc_rows, parse_statement_file
+from refundradar.parser import _hdfc_number, _hdfc_ref, parse_hdfc_rows, parse_statement_file
 from refundradar.reconcile import CONFIRM, LATE, reconcile
 
 SAMPLE = Path(__file__).resolve().parent.parent / "samples" / "hdfc_statement.csv"
@@ -163,6 +163,26 @@ def test_sample_confirmed_failure_is_claimed():
     assert a.on_time_count == 2
 
 
+# Found by driving the web app end to end: xlrd hands a number cell over as a
+# float, so the Excel export's letter said "2000.0" where the CSV's said "2000.00".
+@pytest.mark.parametrize("cell, amount", [
+    (2000.0, "2000.00"), (1245.5, "1245.50"), (2000, "2000.00"),  # spreadsheet number cells
+    ("2,000.00", "2000.00"), ("12.345", "12.345"),  # text is kept exactly, never rounded
+])
+def test_amounts_read_in_rupees_and_paise_and_are_never_rounded(cell, amount):
+    assert str(_hdfc_number(cell, 3, "Withdrawal Amt.")) == amount
+
+
+def test_excel_export_gives_the_same_letter_as_the_csv_export():
+    from refundradar.audit import build_audit
+    from refundradar.complaint import generate_complaint_pack
+
+    def letter(path):
+        a = build_audit(parse_statement_file(path), {"607912345678"}, as_of=date(2026, 4, 30))
+        return generate_complaint_pack(a, "A. Sample Customer", "1234", "sample@example.com")
+    assert letter(SAMPLE.with_suffix(".xls")) == letter(SAMPLE)
+
+
 # --- Rows the parser must never drop or misread silently ---------------------
 
 def _row(day, narration, ref="", withdrawal="", deposit="", balance=""):
@@ -180,11 +200,12 @@ REVERSAL = _row("05/02/26", "UPI-SWIGGY-SWIGGY.ORDER@ICICI-ICIC0DC0099-603412345
 
 
 # Per-defect reproductions live in test_regressions.py; these pin the error
-# contract: every refusal names the row, the column and the offending cell.
+# contract: every refusal names the row, the column and the offending cell,
+# quoted as the file shows it so it can be found there.
 @pytest.mark.parametrize("row, where, cell", [
     (_row("05/02/26", REVERSAL[1], deposit="(450.00)"), "Deposit Amt.", "'(450.00)'"),
     (_row("05/02/26", REVERSAL[1], deposit="450.00", balance="40,000.00 Cr"),
-     "Closing Balance", "'40000.00 Cr'"),
+     "Closing Balance", "'40,000.00 Cr'"),
     ([3.0e6, REVERSAL[1], "", "", "", "450.00", "40,000.00"], "Date", "'3000000.0'"),
     (["", "NARRATION WRAPPED ONTO A SECOND LINE", "", "", "", "", ""], "Date", "''"),
     (_row("05/02/26", "NOTE", balance="39,550.00")[:3] + ["SEE BRANCH"] + ["", "", "39,550.00"],
