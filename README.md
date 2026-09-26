@@ -38,7 +38,7 @@ python -m venv .venv
 .venv\Scripts\python -m refundradar serve
 ```
 
-Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `.xls`, `.xlsx`), or "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
+Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `.xls`, `.xlsx`, or the Delimited `.txt`), or "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
 
 ## Features
 

@@ -38,7 +38,7 @@ CHANNEL_NAMES = {c["code"]: c["name"] for c in load_rules()["channels"]}
 
 NO_TABLE = ("Could not find a statement table in {name}. The web app reads generic CSV "
             "(Date, Narration, Ref, Debit, Credit, Balance) and HDFC exports "
-            "(.csv, .xls, .xlsx).")
+            "(.csv, .xls, .xlsx, or the Delimited .txt).")
 
 app = FastAPI(title="RefundRadar")
 
@@ -81,7 +81,8 @@ def _transactions(req: AuditRequest) -> list[Transaction]:
             "Date, Narration, Ref, Debit, Credit, Balance."
             if req.file is None else
             f"Could not read {req.filename or 'that file'} as a bank statement. "
-            "The web app reads generic CSV and HDFC exports (.csv, .xls, .xlsx)."
+            "The web app reads generic CSV and HDFC exports (.csv, .xls, .xlsx, "
+            "or the Delimited .txt)."
         )
         raise HTTPException(status_code=400, detail=detail) from None
     if txns and txns[0].bank == "SBI":

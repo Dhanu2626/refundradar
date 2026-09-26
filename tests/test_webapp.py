@@ -1,5 +1,6 @@
 """The web layer: every endpoint, the happy path and the failure path."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -211,6 +212,37 @@ def test_file_that_is_no_statement_says_what_the_web_app_reads():
     assert res.json()["detail"].startswith("Could not find a statement table in notes.csv.")
 
 
+DELIMITED = (  # HDFC's Delimited layout, as tests/test_hdfc.py infers it
+    " Date     ,Narration                                                       "
+    ",Value Dat,Debit Amount       ,Credit Amount      ,Chq/Ref Number   ,Closing Balance\n"
+    " 03/02/26 ,UPI-SWIGGY-SWIGGY.ORDER@ICICI-ICIC0DC0099-603412345678-PAYMENT  "
+    ",03/02/26 ,           450.00  ,             0.00  ,0000603412345678 ,       39550.00\n"
+    " 05/02/26 ,UPI-SWIGGY-SWIGGY.ORDER@ICICI-ICIC0DC0099-603412345678-REVERSAL "
+    ",05/02/26 ,             0.00  ,           450.00  ,0000603412345678 ,       40000.00\n"
+)
+
+
+def test_delimited_txt_upload_is_read_as_hdfc():
+    res = _upload(DELIMITED.encode(), "hdfc_delimited.txt")
+    assert res.status_code == 200
+    body = res.json()
+    assert (body["statement"]["format"], body["statement"]["transactions"]) == ("HDFC", 2)
+    assert [i["status"] for i in body["audit"]["incidents"]] == ["refunded_on_time"]
+
+
+@pytest.mark.parametrize("data", [
+    b"Shopping list\nmilk\neggs\n", b"", b"   \n\n", bytes(range(256)) * 4,
+    "hello\n".encode("utf-16"),
+], ids=["notes", "empty", "blank lines", "binary", "utf-16 text"])
+def test_txt_that_is_no_statement_is_refused_and_says_what_is_read(data):
+    # the picker offers .txt, so any text file can arrive: it is refused whole,
+    # and the refusal lists .txt among the formats the web app reads
+    res = _upload(data, "notes.txt")
+    assert res.status_code == 400 and set(res.json()) == {"detail"}
+    detail = res.json()["detail"]
+    assert "notes.txt" in detail and ".txt" in detail.replace("notes.txt", "")
+
+
 def test_damaged_or_missing_statement_gets_a_clear_400():
     res = client.post("/api/audit", json={"file": "not base64!", "filename": "x.xls"})
     assert (res.status_code, res.json()["detail"]) == (
@@ -239,6 +271,23 @@ def test_complaint_from_an_uploaded_hdfc_xls():
 
 def test_index_accepts_statement_files_and_says_what_is_unverified():
     html = client.get("/").text
-    assert 'accept=".csv,.xls,.xlsx"' in html
+    # the picker offers every format the web app reads, HDFC's Delimited .txt too
+    accept = re.search(r'id="file" accept="([^"]*)"', html).group(1)
+    assert set(accept.split(",")) == {".csv", ".xls", ".xlsx", ".txt"}
     assert "Unable to conclusively match" in html
     assert "synthetically tested" in html
+
+
+def test_never_reversed_payment_is_offered_then_claimed_only_once_confirmed():
+    # D6: a payment that failed and never came back looks, on the statement,
+    # like any payment that went through; it is offered for confirmation and
+    # claimed only after the user says it failed
+    first = _upload(HDFC_CSV.read_bytes(), "hdfc_statement.csv").json()
+    assert [c["amount"] for c in first["candidates"] if c["ref"] == "607912345678"] == ["2499.00"]
+    assert all(i["ref"] != "607912345678" for i in first["audit"]["incidents"])
+    second = _upload(HDFC_CSV.read_bytes(), "hdfc_statement.csv",
+                     confirmed=["607912345678"]).json()
+    [rent] = [i for i in second["audit"]["incidents"] if i["ref"] == "607912345678"]
+    assert (rent["status"], rent["compensation_inr"]) == ("never_refunded", 4000)  # due 21 Mar
+    assert second["audit"]["total_owed_inr"] == 800 + 600 + 4000
+    assert all(c["ref"] != "607912345678" for c in second["candidates"])

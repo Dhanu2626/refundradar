@@ -403,12 +403,13 @@
         <strong>Drop your bank statement here</strong>
         <p class="or">or choose a file from this computer</p>
         <div class="formats"><span class="chip">Generic CSV</span><span class="chip">HDFC .csv</span>
-          <span class="chip">HDFC .xls</span><span class="chip">HDFC .xlsx</span></div>
+          <span class="chip">HDFC .xls</span><span class="chip">HDFC .xlsx</span>
+          <span class="chip">HDFC Delimited .txt</span></div>
         <p class="note">Generic CSV needs the columns Date, Narration, Ref, Debit, Credit, Balance.
           HDFC reading is synthetically tested, not yet verified against a real HDFC export.</p>
         <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Choose a file</button>
       </div>
-      <input type="file" id="file" accept=".csv,.xls,.xlsx" hidden>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
       <div class="cta">
         <button type="button" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Try with a demo statement</button>

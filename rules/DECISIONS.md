@@ -150,6 +150,8 @@ assumption into a visible, reportable error instead of a wrong number.
 - *Unknown, stood in for by the synthetic sample:* how HDFC words a failed-payment
   reversal; whether the reversal repeats the original RRN, and where (narration, ref
   column, both, neither); whether the .xls download is genuine BIFF or an HTML table;
+  the Delimited download's file extension (tests assume .txt; the web app accepts
+  .txt and .csv, and reads the content whatever the name);
   whether long narrations wrap onto continuation rows.
 
 **Risk:** the first real HDFC statement may stop on a row shape the parser has never
