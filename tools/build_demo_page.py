@@ -165,9 +165,11 @@ BANNER = f"""<div class="demo-bar"><span class="pill">Live demo</span><span>Synt
 
 DEMO_CSS = """
   /* the public demo's few rules of its own; everything else is the app's */
+  :root { --demo-bar: #0d1b1b; }
+  :root[data-theme="light"] { --demo-bar: #e2f5f1; }
   .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
               gap: 4px 10px; min-height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--line);
-              background: #0d1b1b; color: var(--ink-2); font-size: 13px; text-align: center; }
+              background: var(--demo-bar); color: var(--ink-2); font-size: 13px; text-align: center; }
   .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
                     color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
                     letter-spacing: .06em; text-transform: uppercase; }
@@ -175,12 +177,12 @@ DEMO_CSS = """
   .shell { min-height: calc(100vh - 40px); }
   @media (min-width: 1024px) { .side { height: calc(100vh - 40px); } }
   .drop.demo, .drop.demo:hover { cursor: default; border-style: solid;
-                                 border-color: rgba(45, 212, 191, .3); }
+                                 border-color: var(--teal-line); }
   a.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
              min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
              color: var(--ink); font-size: 14.5px; font-weight: 600; text-decoration: none;
              transition: background-color .15s, border-color .15s; }
-  a.button:hover { background: var(--surface-2); border-color: #414856; }
+  a.button:hover { background: var(--surface-2); border-color: var(--line-hover); }
   .ro-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600;
               color: var(--ink-2); }
   .ro { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-2);
