@@ -44,9 +44,9 @@ def test_demo_page_is_the_apps_own_page():
     app = INDEX.read_text(encoding="utf-8")
     page = bd.render(*bd.build_demo_data())
     style = re.search(r"<style>.*?</style>", app, re.S).group(0)
-    view = re.search(r"<script>.*?</script>", app, re.S).group(0)
-    assert "function render(data)" in view and "function incidentRow(i)" in view
-    assert style in page and view in page
+    shared = re.findall(r"<script>.*?</script>", bd.SWAP.sub("", app), re.S)
+    assert any("function render(data)" in s and "function incidentRow(i)" in s for s in shared)
+    assert style in page and all(s in page for s in shared)
     # the dark dashboard, not the retired light page
     assert "--bg: #0a0b0d" in page and "#f7f6f3" not in page
 

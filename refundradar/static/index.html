@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0b0d">
 <!-- The public demo page (docs/index.html) is built from this file by
      tools/build_demo_page.py: it keeps everything here except the blocks between
@@ -11,18 +11,35 @@
 <!-- demo-swap:title --><title>RefundRadar</title><!-- /demo-swap:title -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
+<script>
+  // the theme you chose last time on this browser: dark unless you chose light
+  const THEME_KEY = "refundradar-theme";
+  try { if (localStorage.getItem(THEME_KEY) === "light") document.documentElement.dataset.theme = "light"; }
+  catch (_) {}
+</script>
 <style>
+  /* Colours live here and only here. Dark is the default; every colour that depends on
+     the background has a light twin below. */
   :root {
     --bg: #0a0b0d; --side: #0e1013; --surface: #111318; --surface-2: #171a21;
-    --surface-3: #1e222b; --line: #23272f; --line-2: #333945;
-    --ink: #f5f6f7; --ink-2: #d1d5db; --muted: #9ca3af;
-    --accent: #2dd4bf; --brand: #14b8a6; --accent-ink: #04201c;
-    --accent-soft: rgba(45, 212, 191, .12);
-    --gold: #fbbf24; --gold-soft: rgba(251, 191, 36, .12);
-    --coral: #fb7185; --coral-soft: rgba(251, 113, 133, .12);
+    --surface-3: #1e222b; --line: #23272f; --line-2: #333945; --line-hover: #414856;
+    --ink: #f5f6f7; --ink-2: #d1d5db; --muted: #9ca3af; --placeholder: #7d8594;
+    --accent: #2dd4bf; --accent-soft: rgba(45, 212, 191, .12);
+    --brand-line: #14b8a6; --brand-hover-line: #2dd4bf; --mark-glow: rgba(20, 184, 166, .28);
+    --gold: #fbbf24; --gold-soft: rgba(251, 191, 36, .12); --gold-ink: #fde68a;
+    --gold-line: rgba(251, 191, 36, .3); --gold-glow: rgba(251, 191, 36, .13); --hero-top: #16181e;
+    --coral: #fb7185; --coral-soft: rgba(251, 113, 133, .12); --coral-ink: #fecdd3;
+    --coral-line: rgba(251, 113, 133, .38);
     --green: #4ade80; --green-soft: rgba(74, 222, 128, .12);
     --violet: #c4b5fd; --violet-soft: rgba(167, 139, 250, .14);
+    --ask-line: rgba(196, 181, 253, .32); --ask-hover: rgba(167, 139, 250, .24);
     --slate: #b4bcc8; --slate-soft: rgba(156, 163, 175, .12);
+    --teal-line: rgba(45, 212, 191, .3); --teal-glow: rgba(45, 212, 191, .08);
+    --page-glow: rgba(20, 184, 166, .10); --side-glow: rgba(45, 212, 191, .06);
+    --drop-glow: rgba(45, 212, 191, .09); --drop-over: #0f1d1f;
+    /* the brand's own teal: the same on either background */
+    --brand: #14b8a6; --brand-hover: #2dd4bf; --accent-ink: #04201c;
+    --mark-from: #2dd4bf; --mark-to: #0d9488;
     --radius: 16px; --side-w: 272px;
     --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
             "Helvetica Neue", Arial, sans-serif;
@@ -32,6 +49,28 @@
     --i-warn: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3ZM12 9v4M12 17h.01'/%3E%3C/svg%3E");
     --i-error: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v4M12 16h.01'/%3E%3C/svg%3E");
     color-scheme: dark;
+  }
+  /* The light twin of every colour above. Each keeps its dark twin's hue and is made only
+     as much darker as it needs to pass WCAG AA on white, on the row grey and on its own tint,
+     so switching changes the light, not the look. */
+  :root[data-theme="light"] {
+    --bg: #f2f4f7; --side: #ffffff; --surface: #ffffff; --surface-2: #f4f6f9;
+    --surface-3: #e8ecf1; --line: #e1e6ec; --line-2: #ccd3dc; --line-hover: #aab4c1;
+    --ink: #0f1723; --ink-2: #334155; --muted: #606772; --placeholder: #5f6775;
+    --accent: #037669; --accent-soft: rgba(45, 212, 191, .14);
+    --brand-line: #0d9488; --brand-hover-line: #0d9488; --mark-glow: rgba(13, 148, 136, .22);
+    --gold: #8f5f01; --gold-soft: rgba(251, 191, 36, .18); --gold-ink: #774f02;
+    --gold-line: rgba(234, 170, 20, .45); --gold-glow: rgba(251, 191, 36, .16); --hero-top: #fffdf6;
+    --coral: #b9344f; --coral-soft: rgba(251, 113, 133, .14); --coral-ink: #a31c3e;
+    --coral-line: rgba(185, 52, 79, .3);
+    --green: #04793b; --green-soft: rgba(74, 222, 128, .16);
+    --violet: #6d57ab; --violet-soft: rgba(167, 139, 250, .16);
+    --ask-line: rgba(109, 87, 171, .3); --ask-hover: rgba(167, 139, 250, .26);
+    --slate: #525a66; --slate-soft: rgba(156, 163, 175, .16);
+    --teal-line: rgba(13, 148, 136, .35); --teal-glow: rgba(45, 212, 191, .10);
+    --page-glow: rgba(20, 184, 166, .08); --side-glow: rgba(45, 212, 191, .08);
+    --drop-glow: rgba(45, 212, 191, .10); --drop-over: #e9f8f5;
+    color-scheme: light;
   }
   * { box-sizing: border-box; margin: 0; }
   body { font-family: var(--sans); font-size: 15px; line-height: 1.55; color: var(--ink);
@@ -64,8 +103,8 @@
   .brand { display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 700;
            letter-spacing: -.01em; }
   .brand .mark { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-                 background: linear-gradient(135deg, #2dd4bf, #0d9488); color: var(--accent-ink);
-                 box-shadow: 0 8px 28px rgba(20, 184, 166, .28); }
+                 background: linear-gradient(135deg, var(--mark-from), var(--mark-to)); color: var(--accent-ink);
+                 box-shadow: 0 8px 28px var(--mark-glow); }
   .brand .mark svg { width: 23px; height: 23px; stroke-width: 2.2; }
   .brand .tl { color: var(--accent); }
   .steps { list-style: none; padding: 0; display: grid; gap: 4px; }
@@ -81,11 +120,11 @@
   .steps li[aria-current="step"] { background: var(--accent-soft); }
   .steps li[aria-current="step"] .dot { border-color: var(--accent); color: var(--accent); }
   .steps li[aria-current="step"] b { color: var(--ink); }
-  .steps li.done .dot { background: var(--brand); border-color: var(--brand); color: var(--accent-ink); }
+  .steps li.done .dot { background: var(--brand); border-color: var(--brand-line); color: var(--accent-ink); }
   .steps li.done .dot span { display: none; }
   .steps li.done .dot svg { display: block; }
   .privacy { border: 1px solid var(--line); border-radius: 14px; padding: 16px;
-             background: linear-gradient(180deg, rgba(45, 212, 191, .06), transparent); }
+             background: linear-gradient(180deg, var(--side-glow), transparent); }
   .privacy h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px;
                 font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
   .privacy ul { list-style: none; padding: 0; display: grid; gap: 9px; font-size: 13.5px;
@@ -95,7 +134,7 @@
   .side-foot { margin-top: auto; font-size: 12.5px; color: var(--muted); }
 
   .page { min-width: 0; padding: 32px 44px 40px;
-          background: radial-gradient(900px 380px at 88% -140px, rgba(20, 184, 166, .10), transparent 70%); }
+          background: radial-gradient(900px 380px at 88% -140px, var(--page-glow), transparent 70%); }
   .page:focus { outline: none; }
   .wrap { max-width: 1060px; margin: 0 auto; }
   .eyebrow { font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -110,11 +149,11 @@
   /* screen 1: the doorway */
   .drop { margin-top: 24px; padding: 34px 24px 30px; text-align: center; cursor: pointer;
           border-radius: 20px; border: 1.5px dashed var(--line-2);
-          background: radial-gradient(640px 220px at 50% 0%, rgba(45, 212, 191, .09), transparent 70%),
+          background: radial-gradient(640px 220px at 50% 0%, var(--drop-glow), transparent 70%),
                       var(--surface);
           transition: border-color .2s, background-color .2s, transform .2s; }
   .drop:hover, .drop:focus-within, .drop.over { border-color: var(--accent); }
-  .drop.over { transform: scale(1.01); background-color: #0f1d1f; }
+  .drop.over { transform: scale(1.01); background-color: var(--drop-over); }
   .drop .up { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 18px; display: grid;
               place-items: center; background: var(--accent-soft); color: var(--accent); }
   .drop .up svg { width: 28px; height: 28px; }
@@ -144,19 +183,40 @@
            min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
            background: var(--surface-2); font-size: 14.5px; font-weight: 600; text-align: center;
            cursor: pointer; transition: background-color .15s, border-color .15s, transform .15s; }
-  button:hover { background: var(--surface-3); border-color: #414856; }
+  button:hover { background: var(--surface-3); border-color: var(--line-hover); }
   button:active { transform: translateY(1px); }
-  button.primary { background: var(--brand); border-color: var(--brand); color: var(--accent-ink); }
-  button.primary:hover { background: var(--accent); border-color: var(--accent); }
+  button.primary { background: var(--brand); border-color: var(--brand-line); color: var(--accent-ink); }
+  button.primary:hover { background: var(--brand-hover); border-color: var(--brand-hover-line); }
   button.ghost { background: transparent; }
   button.ghost:hover { background: var(--surface-2); }
-  button.ask { background: var(--violet-soft); border-color: rgba(196, 181, 253, .32);
+  button.ask { background: var(--violet-soft); border-color: var(--ask-line);
                color: var(--violet); }
-  button.ask:hover { background: rgba(167, 139, 250, .24); border-color: var(--violet); }
+  button.ask:hover { background: var(--ask-hover); border-color: var(--violet); }
+
+  /* colour theme switch: top right of the page, of the top bar on phones */
+  .page-top { display: flex; justify-content: flex-end; margin: -14px 0 12px; }
+  .theme { display: inline-flex; border: 1px solid var(--line-2); border-radius: 999px;
+           background: var(--surface); }
+  .theme button, .theme button:hover { min-height: 44px; gap: 7px; padding: 0 14px;
+      border: 3px solid transparent; border-radius: 999px; background: transparent;
+      background-clip: padding-box; color: var(--muted); font-size: 13.5px; }
+  .theme button:hover { background-color: var(--surface-2); color: var(--ink); }
+  .theme svg { width: 16px; height: 16px; }
+  /* the chosen theme is read from the page itself, so it shows before any script runs */
+  :root:not([data-theme="light"]) .theme [data-theme-choice="dark"],
+  :root[data-theme="light"] .theme [data-theme-choice="light"] {
+      background-color: var(--surface-3); color: var(--ink); }
+  :root:not([data-theme="light"]) .theme [data-theme-choice="dark"] svg,
+  :root[data-theme="light"] .theme [data-theme-choice="light"] svg { color: var(--accent); }
+  @media (prefers-reduced-motion: no-preference) {
+    /* switching: colours cross-fade instead of flashing */
+    html.theming, html.theming *, html.theming *::before, html.theming *::after {
+      transition: background-color .25s ease, border-color .25s ease, color .25s ease !important; }
+  }
 
   .error { display: none; position: relative; margin-bottom: 20px; padding: 13px 16px 13px 46px;
-           border-radius: 12px; border: 1px solid rgba(251, 113, 133, .38);
-           background: var(--coral-soft); color: #fecdd3; font-size: 14.5px; overflow-wrap: anywhere; }
+           border-radius: 12px; border: 1px solid var(--coral-line);
+           background: var(--coral-soft); color: var(--coral-ink); font-size: 14.5px; overflow-wrap: anywhere; }
   .error::before { content: ""; position: absolute; left: 16px; top: 14px; width: 19px; height: 19px;
                    background: var(--coral);
                    -webkit-mask: var(--i-error) center / contain no-repeat;
@@ -187,7 +247,7 @@
                     background: var(--slate);
                     -webkit-mask: var(--i-info) center / contain no-repeat;
                     mask: var(--i-info) center / contain no-repeat; }
-  .verify.caution { background: var(--gold-soft); color: #fde68a; }
+  .verify.caution { background: var(--gold-soft); color: var(--gold-ink); }
   .verify.caution::before { background: var(--gold); -webkit-mask-image: var(--i-warn);
                             mask-image: var(--i-warn); }
   .verify:empty { display: none; }
@@ -202,9 +262,9 @@
                 letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .kpi .cap { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
   .kpi:not(.hero) .cap { margin-top: auto; padding-top: 12px; }
-  .kpi.hero { border-color: rgba(251, 191, 36, .3);
-              background: radial-gradient(560px 260px at 100% 0%, rgba(251, 191, 36, .13), transparent 70%),
-                          linear-gradient(180deg, #16181e, var(--surface)); }
+  .kpi.hero { border-color: var(--gold-line);
+              background: radial-gradient(560px 260px at 100% 0%, var(--gold-glow), transparent 70%),
+                          linear-gradient(180deg, var(--hero-top), var(--surface)); }
   .kpi.hero .label { color: var(--gold); }
   .kpi.hero .label svg { width: 16px; height: 16px; }
   .kpi.hero .value { font-size: clamp(42px, 5vw, 60px); color: var(--gold); }
@@ -268,8 +328,8 @@
            border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: 14px; }
 
   /* screen 3: the action */
-  .claim { border-color: rgba(45, 212, 191, .3);
-           background: radial-gradient(700px 220px at 0% 0%, rgba(45, 212, 191, .08), transparent 70%),
+  .claim { border-color: var(--teal-line);
+           background: radial-gradient(700px 220px at 0% 0%, var(--teal-glow), transparent 70%),
                        var(--surface); }
   .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; }
   .lbl, .field label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); }
@@ -279,14 +339,14 @@
   input[type=text], input[type=search] { width: 100%; min-height: 44px; padding: 10px 12px;
       border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--ink);
       transition: border-color .15s; }
-  input[type=text]:hover, input[type=search]:hover { border-color: #414856; }
+  input[type=text]:hover, input[type=search]:hover { border-color: var(--line-hover); }
   input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-  input::placeholder { color: #7d8594; }
+  input::placeholder { color: var(--placeholder); }
   .search { position: relative; margin-top: 6px; }
   .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
                 color: var(--muted); pointer-events: none; }
   .search input { padding-left: 40px; }
-  .field-error { margin-top: 12px; font-size: 13.5px; color: #fecdd3; }
+  .field-error { margin-top: 12px; font-size: 13.5px; color: var(--coral-ink); }
   .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .pack { max-height: 520px; overflow: auto; margin-top: 14px; padding: 18px; border-radius: 12px;
           border: 1px solid var(--line); background: var(--bg); color: var(--ink-2);
@@ -316,6 +376,8 @@
     .steps li { gap: 8px; padding: 8px; }
     .steps small, .privacy, .side-foot { display: none; }
     .page { padding: 24px 16px 32px; }
+    .shell { position: relative; }
+    .page-top { position: absolute; top: 13px; right: 16px; margin: 0; }
   }
   @media (max-width: 760px) {
     .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -334,6 +396,12 @@
     .inc .act { flex-basis: 100%; }
     .inc .act button { width: 100%; }
     .row button { flex: 1 1 auto; }
+  }
+  @media (max-width: 479px) {
+    /* phones: the switch shows its icons; the words stay for screen readers */
+    .theme-name { position: absolute; width: 1px; height: 1px; overflow: hidden;
+                  clip-path: inset(50%); white-space: nowrap; }
+    .theme button, .theme button:hover { padding: 0 11px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important;
@@ -364,6 +432,8 @@
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
   <symbol id="i-rupee" viewBox="0 0 24 24"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
 </svg>
 
 <div class="shell">
@@ -394,6 +464,12 @@
   </aside>
 
   <main class="page" id="content" tabindex="-1">
+  <div class="page-top">
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="dark" aria-pressed="true"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg><span class="theme-name">Dark</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg><span class="theme-name">Light</span></button>
+    </div>
+  </div>
   <div class="wrap">
     <div class="error" id="error" role="alert"></div>
 
@@ -716,6 +792,25 @@ function showPack(text) {
   setStage("claim");
   $("pack-card").scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "start" });
 }
+
+// dark or light: the same page, each with colours tuned for its background
+function showTheme(theme) {
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  document.querySelectorAll("[data-theme-choice]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.themeChoice === theme)));
+  document.querySelector('meta[name="theme-color"]').content =
+    getComputedStyle(root).getPropertyValue("--bg").trim();
+}
+
+document.querySelectorAll("[data-theme-choice]").forEach((b) => b.addEventListener("click", () => {
+  const root = document.documentElement;
+  root.classList.add("theming");
+  showTheme(b.dataset.themeChoice);
+  setTimeout(() => root.classList.remove("theming"), 300);
+  try { localStorage.setItem(THEME_KEY, b.dataset.themeChoice); } catch (_) {}
+}));
+showTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
 $("download-btn").addEventListener("click", () => {
   const blob = new Blob([state.packText], { type: "text/markdown" });
