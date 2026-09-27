@@ -525,13 +525,13 @@
         <p class="or">or</p>
         <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Upload bank statement</button>
         <ul class="banks" aria-label="Statements RefundRadar reads">
-          <li><b>SBI</b><span>Excel (.xlsx, .xls) or CSV, including the password-protected download</span></li>
-          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV or the Delimited .txt &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
+          <li><b>SBI</b><span>Excel (.xlsx, .xls), CSV or PDF, password-protected too &middot; PDF reading synthetically tested, not yet verified against a real SBI PDF</span></li>
+          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV, the Delimited .txt or PDF &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
         </ul>
         <p class="note">Also reads a CSV with the columns Date, Narration, Ref, Debit, Credit, Balance.
-          Other banks and PDF statements aren't supported yet.</p>
+          Other banks, and scanned or photographed statements, aren't supported.</p>
       </div>
-      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt,.pdf" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
       <p class="private"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Your statement is read on this device and never leaves it.</p>
       <p class="sample">Don't have a statement?
@@ -556,8 +556,8 @@
         <div class="field"><label for="pw">Statement password</label>
           <input type="password" id="pw" autocomplete="off" spellcheck="false"></div>
         <p class="field-error hidden" id="pw-error" role="alert"></p>
-        <p class="hint">Your bank's statement download page shows the password format. It is not
-          your login password.</p>
+        <p class="hint">Your bank's download page, or the email the statement came with, says how
+          the password is made. It is not your login password.</p>
         <div class="row">
           <button type="button" class="primary" id="unlock-btn"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Open statement</button>
           <button type="button" class="ghost again">Choose a different file</button>
@@ -748,7 +748,7 @@ function showDetected(s, fileName) {
   $("unlock-card").classList.add("hidden");
   $("detected-card").classList.remove("hidden");
   $("det-bank").textContent = s.bank === "generic" ? "None named (generic CSV)" : s.bank;
-  $("det-type").textContent = s.file_type + (s.unlocked_file ? ", opened with your password" : "");
+  $("det-type").textContent = s.file_type + (s.password_used ? ", opened with your password" : "");
   $("det-count").textContent = `${s.transactions} (${s.payments} out, ${s.credits} in)`;
   $("det-period").textContent = s.first ? `${day(s.first)} – ${day(s.last)}` : "–";
   $("det-verify").textContent = s.verification;
@@ -936,12 +936,13 @@ $("download-btn").addEventListener("click", () => {
 // (refundradar/webapp.py) run under Pyodide, loaded from this site, so a
 // statement chosen here is read in this page and sent nowhere.
 const ENGINE_FILES = ["vendor/xlrd-2.0.2-py2.py3-none-any.whl", "vendor/openpyxl-3.1.5-py2.py3-none-any.whl", "vendor/et_xmlfile-2.0.0-py3-none-any.whl", "vendor/olefile-0.47-py2.py3-none-any.whl", "vendor/pyyaml-6.0.3-pure.zip", "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl", "engine.zip"];
+const PDF_READER = "vendor/pdfminer_six-20260107-nocmap.zip";
 let engineReady = false;
 
 // The first visit downloads the Python runtime (the browser keeps it after):
 // count it as it arrives, so a slow connection shows progress, not a stall.
 // Responses pass through unchanged; only their bytes are counted.
-const RUNTIME_BYTES = 13123694;
+const RUNTIME_BYTES = 13151832;
 let arrived = 0;
 const plainFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -961,10 +962,11 @@ function showArrival() {
 }
 
 const runtime = loadPyodide({ indexURL: "pyodide/" });
+const unpack = async (py, f) =>
+  py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
 const engine = (async () => {
   const py = await runtime;
-  for (const f of ENGINE_FILES)
-    py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
+  for (const f of ENGINE_FILES) await unpack(py, f);
   py.runPython("import sys; sys.path.insert(0, '/engine')");
   return py.pyimport("bridge");
 })();
@@ -973,9 +975,21 @@ engine.then(() => { engineReady = true; engineState("ready", "ready"); },
 
 // Opening a password-protected file takes Pyodide's build of cryptography,
 // from this site, checked against pyodide-lock.json: fetched the first time a
-// password is typed, so nobody else downloads it.
+// password is typed, so nobody else downloads it. Reading a PDF takes it too,
+// with Pyodide's charset-normalizer and the vendored pdfminer.six: fetched the
+// first time a PDF is chosen.
 let unlocker = null;
+let pdfReader = null;
 const canUnlock = () => unlocker ??= runtime.then((py) => py.loadPackage("cryptography"));
+const canReadPdf = () => pdfReader ??= runtime.then(async (py) => {
+  await py.loadPackage(["cryptography", "charset-normalizer"]);
+  await unpack(py, PDF_READER);
+  py.runPython("import importlib; importlib.invalidate_caches()");  // /engine gained files
+});
+function isPdf(file) {  // a PDF's header is in its first kilobyte
+  try { return typeof file === "string" && atob(file.slice(0, 1368)).includes("%PDF-"); }
+  catch (_) { return false; }
+}
 
 function engineState(state, words) {
   const el = $("engine-state");
@@ -996,13 +1010,18 @@ async function send(path, body) {
     throw new Error("RefundRadar couldn't start in this browser. Update it, or open this page in " +
                     "a current Chrome, Edge, Firefox or Safari (iPhone: iOS 16.4 or later).");
   }
-  if (body !== undefined && body.password) {
+  const pdf = body !== undefined && isPdf(body.file);
+  if (pdf && pdfReader === null)
+    setStatus("Loading the PDF reader: 3.1 MB, the first time a PDF is read…");
+  if (pdf || (body !== undefined && body.password)) {
     try {
-      await canUnlock();
+      await (pdf ? canReadPdf() : canUnlock());
     } catch (_) {
-      unlocker = null;
-      throw new Error("The part that opens password-protected files couldn't load. Try " +
-                      "again, or save the file unprotected from Excel and choose that copy.");
+      unlocker = pdfReader = null;
+      throw new Error(pdf ? "The part that reads PDFs couldn't load. Try again, or download " +
+                            "the statement as Excel or CSV and choose that."
+                          : "The part that opens password-protected files couldn't load. Try " +
+                            "again, or save the file unprotected from Excel and choose that copy.");
     }
   }
   await new Promise((r) => setTimeout(r, 16));  // let "Auditing…" show before the engine works

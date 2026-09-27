@@ -4,3 +4,5 @@ docs/pyodide/** -text
 docs/vendor/** -text
 # The realistic bank downloads keep their own bytes, CRLF line endings included.
 samples/realistic/** -text
+# ...and so do the PDF layouts, compared byte for byte with what the generator draws.
+samples/pdf_layouts/** -text

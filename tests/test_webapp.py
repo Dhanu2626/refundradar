@@ -30,7 +30,8 @@ def test_index_serves_the_app_upload_first():
     assert "Drag &amp; drop your bank statement here" in landing
     assert landing.index('id="drop"') < landing.index('id="demo-btn" class="link"')
     assert "<b>SBI</b>" in landing and "<b>HDFC</b>" in landing
-    assert "Other banks and PDF statements aren't supported yet." in landing
+    assert "Other banks, and scanned or photographed statements, aren't supported." in landing
+    assert "not yet verified against a real SBI PDF" in landing  # PDFs: synthetic only (D18)
 
 
 def _never_refunded_ref():
@@ -297,11 +298,11 @@ def test_another_banks_export_is_refused_by_name():
     assert "not laid out the way SBI or HDFC exports are" in res.json()["detail"]
 
 
-def test_a_pdf_is_refused_with_what_to_download_instead():
+def test_a_damaged_pdf_is_refused_with_what_to_do():
+    # PDFs are read (tests/test_pdf.py); one that isn't whole is refused, not guessed at
     res = _upload(b"%PDF-1.7\n1 0 obj\n", "statement.pdf")
     assert (res.status_code, res.json()["detail"]) == (400, (
-        "This is a PDF. RefundRadar reads the Excel or CSV statement your bank "
-        "lets you download, not PDF statements."))
+        "This PDF is damaged or incomplete, so it can't be read. Download it again."))
 
 
 # --- Detecting the statement before the audit, and unlocking it (D17) -------
@@ -376,9 +377,9 @@ def test_complaint_from_an_uploaded_hdfc_xls():
 
 def test_index_accepts_statement_files_and_says_what_is_unverified():
     html = client.get("/").text
-    # the picker offers every format the web app reads, HDFC's Delimited .txt too
+    # the picker offers every format the web app reads, HDFC's Delimited .txt and PDFs too
     accept = re.search(r'id="file" accept="([^"]*)"', html).group(1)
-    assert set(accept.split(",")) == {".csv", ".xls", ".xlsx", ".txt"}
+    assert set(accept.split(",")) == {".csv", ".xls", ".xlsx", ".txt", ".pdf"}
     assert "Unable to conclusively match" in html
     assert "synthetically tested" in html
 

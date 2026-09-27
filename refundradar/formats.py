@@ -2,8 +2,9 @@
 
 Field-tested reality: SBI exports a password-protected OLE2 container with
 an .xlsx extension. Other banks ship real xlsx, legacy xls, HTML tables
-renamed .xls, or plain CSV. sniff() identifies what a file really is from
-its bytes; load_rows() turns any spreadsheet variant into plain rows.
+renamed .xls, or plain CSV, and every bank offers a PDF. sniff() identifies
+what a file really is from its bytes; load_rows() turns any spreadsheet
+variant, or a PDF's table (pdftable.py), into plain rows.
 """
 
 import io
@@ -32,6 +33,8 @@ def sniff(data: bytes) -> str:
         ole = olefile.OleFileIO(io.BytesIO(data))
         names = {"/".join(n) for n in ole.listdir()}
         return "encrypted" if "EncryptionInfo" in names else "xls"
+    if b"%PDF-" in data[:1024]:  # a PDF may carry a little junk before its header
+        return "pdf"
     head = data[:2048].lstrip().lower()
     if head.startswith(b"<html") or head.startswith(b"<!doctype") or b"<table" in head:
         return "html"
@@ -106,10 +109,8 @@ def load_rows(data: bytes, password: str | None = None) -> list[list]:
             rows.append([ws.cell(r, c).value for c in range(ws.ncols)])
         return rows
     if kind == "pdf":
-        raise ValueError(
-            "This is a PDF. RefundRadar reads the Excel or CSV statement your bank "
-            "lets you download, not PDF statements."
-        )
+        from refundradar.pdftable import pdf_rows
+        return pdf_rows(data, password=password)
     raise ValueError(
         f"Unsupported statement format ({kind}). Export as Excel or CSV."
     )

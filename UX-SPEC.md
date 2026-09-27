@@ -10,8 +10,9 @@ pre-filled fields → get your letter.
 ## Screen 1 — the doorway
 
 - One action first: "Upload bank statement", or drag and drop it anywhere on the zone.
-- Name what it reads: SBI and HDFC, with their formats and how far each is tested;
-  other banks and PDFs are said to be unsupported, not guessed at.
+- Name what it reads: SBI and HDFC, with their formats (Excel, CSV and PDF) and how far
+  each is tested; other banks, and scanned or photographed statements, are said to be
+  unsupported, not guessed at. *(PDFs added 2026-09-27, labelled synthetically tested.)*
 - One trust line: "Your statement is read on this device and never leaves it."
 - A secondary link, after the upload: "Don't have a statement? Try the sample
   statement." It goes through exactly the same steps, and nothing in it is answered
@@ -27,8 +28,12 @@ pre-filled fields → get your letter.
 - Before any analysis: the bank, the file type, how many transactions were read,
   and the dates they cover, plus how far that bank's reader is tested.
 - "Analyze statement" runs the audit; "Choose a different file" goes back.
-- A password-protected file (SBI's download) asks for its password here. It is used
-  once, on the device, and never stored; a wrong one is said to be wrong.
+- A password-protected file (SBI's download, or a bank's e-statement PDF) asks for its
+  password here. It is used once, on the device, and never stored; a wrong one is said
+  to be wrong.
+- A PDF says it was read from a PDF, and that PDF reading is synthetically tested. A
+  PDF that can't be read safely (a scan, a table not laid out as expected) is refused
+  here, naming the page, before anything is analysed.
 
 ## Screen 2 — the audit
 

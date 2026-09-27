@@ -17,9 +17,11 @@ from pydantic import BaseModel
 
 from refundradar.audit import build_audit, to_dict
 from refundradar.complaint import generate_complaint_pack
-from refundradar.formats import EncryptedStatement, WrongPassword, decrypt, sniff
+from refundradar.formats import EncryptedStatement, WrongPassword, decrypt, load_rows, sniff
 from refundradar.model import Transaction
-from refundradar.parser import NO_BANK_TABLE, parse_generic_csv_text, parse_statement_bytes
+from refundradar.parser import (NO_BANK_TABLE, parse_generic_csv_text, parse_rows,
+                                parse_statement_bytes)
+from refundradar.pdftable import MARK
 from refundradar.reconcile import (CONFIRM, can_confirm_failed, has_reference, refund_like,
                                    unmatched_refunds)
 from refundradar.rules_engine import load_rules
@@ -34,14 +36,22 @@ VERIFICATION = {
     "HDFC": "HDFC export: synthetically tested, not yet verified against a real HDFC export.",
     "generic": "Generic CSV (Date, Narration, Ref, Debit, Credit, Balance).",
 }
+# ...and when the statement was read from a PDF (D18)
+VERIFICATION_PDF = {
+    "SBI": "SBI statement read from a PDF: the PDF reader is synthetically tested, not yet "
+           "verified against a real SBI PDF. (The SBI layout was field-tested on one real SBI "
+           "Excel export, July 2026.)",
+    "HDFC": "HDFC statement read from a PDF: synthetically tested, not yet verified against a "
+            "real HDFC PDF or export.",
+}
 
 # What a file is, by its bytes (formats.sniff), in words
 FILE_TYPES = {"xlsx": "Excel workbook (.xlsx)", "xls": "Excel 97-2003 workbook (.xls)",
-              "text": "CSV or delimited text"}
+              "text": "CSV or delimited text", "pdf": "PDF"}
 
-READS = ("RefundRadar reads SBI exports (.xlsx, .xls, .csv), HDFC exports (.xls, .xlsx, "
-         ".csv, or the Delimited .txt), and CSV with the columns Date, Narration, Ref, "
-         "Debit, Credit, Balance.")
+READS = ("RefundRadar reads SBI statements (.xlsx, .xls, .csv or PDF), HDFC statements "
+         "(.xls, .xlsx, .csv, the Delimited .txt or PDF), and CSV with the columns Date, "
+         "Narration, Ref, Debit, Credit, Balance.")
 
 # Plain names for channel codes, for findings that carry no ruling.
 CHANNEL_NAMES = {c["code"]: c["name"] for c in load_rules()["channels"]}
@@ -82,37 +92,54 @@ def _file_bytes(req) -> bytes:
                             detail="The file arrived damaged. Choose it again.") from None
 
 
-def _transactions(req) -> list[Transaction]:
-    """Every transaction on the statement, or a refusal that says why (D10, D16)."""
-    if (req.csv is None) == (req.file is None):
-        raise HTTPException(status_code=400,
-                            detail="Send the statement either as CSV text or as a file.")
+def _from_pdf(req) -> bool:
+    """Whether the statement is a PDF, or the rows read from one (D18)."""
+    if req.file is None:
+        return False
+    data = _file_bytes(req)
+    return sniff(data) == "pdf" or data.startswith(MARK.encode())
+
+
+def _verification(req, bank: str) -> str:
+    table = VERIFICATION_PDF if _from_pdf(req) else VERIFICATION
+    return table.get(bank, VERIFICATION.get(bank, ""))
+
+
+def _refusal(req, e: Exception) -> HTTPException:
+    """Why a statement can't be read, in words the user can act on."""
     name = req.filename or "that file"
-    try:
-        if req.file is None:
-            return parse_generic_csv_text(req.csv)
-        return parse_statement_bytes(_file_bytes(req))
-    except EncryptedStatement:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{name} is password-protected by your bank. Choose it again and "
-                   "enter its password to open it on this device.") from None
-    except ValueError as e:
-        # the parser's own words: they name the row, column and cell
+    if isinstance(e, EncryptedStatement):
+        detail = (f"{name} is password-protected by your bank. Choose it again and "
+                  "enter its password to open it on this device.")
+    elif isinstance(e, ValueError):
+        # the parser's own words: they name the row (or page), column and cell
         detail = str(e)
         if detail == NO_BANK_TABLE:
             detail = NO_TABLE.format(name=name)  # last reader tried
-        raise HTTPException(status_code=400, detail=detail) from None
+    elif req.file is None:
+        detail = ("Could not read that file as a statement CSV. Expected columns: "
+                  "Date, Narration, Ref, Debit, Credit, Balance.")
+    else:
+        detail = f"Could not read {name} as a bank statement. " + READS
+    return HTTPException(status_code=400, detail=detail)
+
+
+def _transactions(req, rows=None) -> list[Transaction]:
+    """Every transaction on the statement, or a refusal that says why (D10,
+    D16). `rows` are a file's rows already read, such as a PDF's."""
+    if (req.csv is None) == (req.file is None):
+        raise HTTPException(status_code=400,
+                            detail="Send the statement either as CSV text or as a file.")
+    try:
+        if rows is not None:
+            return parse_rows(rows)
+        if req.file is None:
+            return parse_generic_csv_text(req.csv)
+        return parse_statement_bytes(_file_bytes(req))
     except HTTPException:
         raise
-    except Exception:
-        detail = (
-            "Could not read that file as a statement CSV. Expected columns: "
-            "Date, Narration, Ref, Debit, Credit, Balance."
-            if req.file is None else
-            f"Could not read {name} as a bank statement. " + READS
-        )
-        raise HTTPException(status_code=400, detail=detail) from None
+    except Exception as e:
+        raise _refusal(req, e) from None
 
 
 def _chosen_refunds(req: AuditRequest, txns: list[Transaction]) -> list[tuple]:
@@ -198,11 +225,23 @@ def statement_endpoint(req: StatementRequest) -> dict:
     """What the file is, before any audit: whose export, how many transactions
     were read (every row, or it is refused) and over which dates. A file the
     bank locked is opened here with the password the user typed and handed
-    back open, so the password is used once and kept nowhere (D17)."""
-    unlocked = None
+    back open, so the password is used once and kept nowhere (D17). A PDF
+    comes back as the rows read from it: later steps need neither the PDF
+    nor its password, and don't read it again (D18)."""
+    unlocked, rows, password_used = None, None, False
     if req.file is not None and req.csv is None:
         data = _file_bytes(req)
-        if sniff(data) == "encrypted":
+        if sniff(data) == "pdf":
+            try:
+                rows = load_rows(data, password=req.password)
+            except WrongPassword:
+                return {"locked": True, "wrong_password": True, "filename": req.filename}
+            except EncryptedStatement:
+                return {"locked": True, "wrong_password": False, "filename": req.filename}
+            except Exception as e:  # unreadable: refused in the same words as any file
+                raise _refusal(req, e) from None
+            password_used = rows.locked
+        elif sniff(data) == "encrypted":
             if not req.password:
                 return {"locked": True, "wrong_password": False, "filename": req.filename}
             try:
@@ -215,16 +254,22 @@ def statement_endpoint(req: StatementRequest) -> dict:
                     detail=f"{req.filename or 'That file'} is password-protected, and "
                            "opening it failed. Save it unprotected from Excel and "
                            "choose that copy.") from None
-            unlocked = base64.b64encode(data).decode()
+            unlocked, password_used = base64.b64encode(data).decode(), True
             req = StatementRequest(file=unlocked, filename=req.filename)
-    txns = _transactions(req)
+    txns = _transactions(req, rows=rows)
     bank = txns[0].bank if txns else "generic"
     dates = sorted(t.txn_date for t in txns)
     kind = "text" if req.file is None else sniff(_file_bytes(req))
+    verification = _verification(req, bank)
+    if rows is not None:
+        unlocked = base64.b64encode(rows.as_csv()).decode()
     return {
         "locked": False,
         "filename": req.filename,
-        "unlocked_file": unlocked,  # the file opened, when it came locked
+        # send this instead of the file from now on: the file opened, when it
+        # came locked; the rows read, from a PDF
+        "unlocked_file": unlocked,
+        "password_used": password_used,
         "bank": bank,
         "file_type": FILE_TYPES.get(kind, kind),
         "transactions": len(txns),
@@ -232,7 +277,7 @@ def statement_endpoint(req: StatementRequest) -> dict:
         "credits": sum(not t.is_debit for t in txns),
         "first": dates[0].isoformat() if dates else None,
         "last": dates[-1].isoformat() if dates else None,
-        "verification": VERIFICATION.get(bank, ""),
+        "verification": verification,
     }
 
 
@@ -275,7 +320,7 @@ def audit_endpoint(req: AuditRequest) -> dict:
         "audit": audit,
         "candidates": candidates,
         "statement": {"filename": req.filename, "format": fmt,
-                      "transactions": len(txns), "verification": VERIFICATION.get(fmt, "")},
+                      "transactions": len(txns), "verification": _verification(req, fmt)},
         "summary": {
             "transactions": len(txns),
             "refunds_found": len(found),
