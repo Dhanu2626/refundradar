@@ -17,6 +17,8 @@ from refundradar import webapp
 
 ROUTES = {
     ("GET", "/api/demo"): lambda body: webapp.demo(),
+    ("POST", "/api/statement"): lambda body: webapp.statement_endpoint(
+        webapp.StatementRequest(**body)),
     ("POST", "/api/audit"): lambda body: webapp.audit_endpoint(webapp.AuditRequest(**body)),
     ("POST", "/api/complaint"): lambda body: webapp.complaint_endpoint(
         webapp.ComplaintRequest(**body)),

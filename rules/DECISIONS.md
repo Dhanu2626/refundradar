@@ -300,3 +300,68 @@ site itself and forbids form submission, and the browser enforces that whatever 
 script tries. The first visit costs about 14 MB. The vendored runtime is trusted as
 pinned; upgrading it means fetching and re-pinning it (build_demo_page.py
 --fetch-runtime).
+
+## D16 — SBI is read strictly, and so the web app reads it (2026-09-27)
+
+**Decision:** the SBI reader follows D10. Inside the table the only rows passed over
+are blank rows, a repeated header, lines of text with no amount (a note, a wrapped
+description, the footer) and dated rows that move no money. Any other row stops the
+audit, naming the row, the column and the cell: an amount on a row without a readable
+date, an amount or Balance that isn't a plain number, both Debit and Credit filled.
+The parsed rows must reproduce SBI's own Balance column. A table is read as SBI's only
+when it carries SBI's marks, its Ref No./Cheque No. column or SBI's IFSC (SBIN0...) or
+name above it; a Date / Debit / Credit table from another bank is refused by name,
+not read as SBI's. With that, the web app and the live demo accept SBI files, which
+they refused while the reader passed over rows it couldn't read.
+
+**Why:** a lenient reader fails silently: a refund row it can't read disappears and the
+audit still prints a confident total. The old reader dropped any row whose date or
+amount it couldn't parse, so the web app refused SBI outright, and the bank the
+product was field-tested on was the one bank its web app couldn't read.
+
+**Evidence status:**
+- *Confirmed against real SBI data (2026-07-24, 106 transactions, via the command
+  line):* the header names, with Details for Description; text dates like 3 Feb 2026;
+  WDL TFR / DEP TFR narrations; reversals under a fresh reference (UPI/REF, D9); the
+  password-protected OLE2 download.
+- *Not yet run on a real file:* the strict row checks and the balance check. The real
+  statement was read by the lenient reader, so whatever rows it passed over are
+  unknown.
+
+**Risk:** the first real SBI statement through the strict reader may stop on a row the
+old reader passed over without a word, such as a totals line or a balance printed with
+Cr. That is the intended failure: the error names the row, and the fix belongs in
+`parse_sbi_rows` with a synthetic test in that shape. A table from another bank that
+prints SBI's column name would be read as SBI's; the balance check still has to pass.
+
+## D17 — The file is identified before it is analysed; a locked file is opened once (2026-09-27)
+
+**Decision:** choosing a file no longer runs the audit. `/api/statement` reads it with
+the same strict readers and answers only what it is: the bank, the file type, how
+many transactions it read, and over which dates. The page shows that, and the audit
+runs when the user presses Analyze statement. A password-protected file (SBI's
+download) is recognised by its bytes; the user types its password, the same endpoint
+opens the file and hands it back open, and the page works from the opened file from
+then on, so the password is used once and kept nowhere. The synthetic sample goes
+through the same two steps, and nothing is confirmed for the user: `/api/demo` no
+longer sends the sample's answer key. In the live demo, the code that decrypts
+(Pyodide's cryptography build, about 2.4 MB, checked against pyodide-lock.json) is
+fetched from the site only when a password is typed.
+
+**Why:** the user should see that RefundRadar read their statement, the right one and
+all of it, before trusting what it says about it; a wrong file or a partial read is
+caught at the door, before any number is shown. Opening SBI's download in the app is
+what the 2026-07-24 field test called for: for real users the wall is opening the
+file, not parsing it. Pre-confirming the sample's never-refunded payment made the
+sample a tour instead of a trial.
+
+**Evidence status:** the unlock path is tested with msoffcrypto's own encryption of the
+synthetic SBI sample (tests/test_webapp.py, tests/test_sbi.py) and, in the live demo,
+in Chromium from the README link: wrong password refused, the right one opens it, the
+cryptography wheels fetched only then and only from the site.
+
+**Risk:** the opened workbook lives in the page's memory like the file itself did. The
+password crosses to the local server (127.0.0.1) or stays in the page (live demo) and
+is never logged or returned. A browser that can't run Pyodide's cryptography can't
+open a locked file in the live demo; it is told to save the file unprotected from
+Excel or run RefundRadar on the computer.

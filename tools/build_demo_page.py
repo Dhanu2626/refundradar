@@ -10,7 +10,9 @@ webapp.py import without FastAPI or pydantic. Pyodide and the pure-Python
 packages the parser reads spreadsheets with are vendored under docs/, pinned by
 SHA-256 below, so the page loads nothing from any other site; its
 Content-Security-Policy lets it connect only to its own. A statement chosen on
-the demo is read in the page and sent nowhere.
+the demo is read in the page and sent nowhere. Pyodide's own build of
+cryptography, which opens a password-protected Excel file (SBI's download), is
+vendored too and fetched only when a password is typed.
 
 Rebuild after any change to the app page or the Python package:
     python tools/build_demo_page.py
@@ -47,7 +49,15 @@ PACKAGES = {
     "vendor/et_xmlfile-2.0.0-py3-none-any.whl": "et-xmlfile",
     "vendor/olefile-0.47-py2.py3-none-any.whl": "olefile",
     "vendor/pyyaml-6.0.3-pure.zip": "pyyaml",  # its pure-Python half, from the source release
+    "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl": "msoffcrypto-tool",  # opens locked files
 }
+# Pyodide's builds of what msoffcrypto-tool decrypts with, loaded with
+# pyodide.loadPackage("cryptography") the first time a password is typed.
+# They come from the Pyodide release and must match pyodide-lock.json, which
+# is itself pinned below.
+PYODIDE_RELEASE = (f"https://github.com/pyodide/pyodide/releases/download/{PYODIDE}/"
+                   f"pyodide-{PYODIDE}.tar.bz2")
+UNLOCK = ("cryptography", "cffi", "pycparser", "six")
 # every vendored file, by SHA-256
 RUNTIME = {
     "pyodide/pyodide.js":
@@ -72,6 +82,16 @@ RUNTIME = {
         "543c7da2a7adadf21214938bb79c83ea12b473a4b6ee4ad4bf854e7715e13d1f",
     "vendor/pyyaml-6.0.3-pure.zip":
         "5f5537e1ebd467c6ddb961466196798021ef56a94df7eb6c09e45edba68cb39d",
+    "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl":
+        "46c394ed5d9641e802fc79bf3fb0666a53748b23fa8c4aa634ae9d30d46fe397",
+    "pyodide/cryptography-47.0.0-cp314-abi3-pyemscripten_2026_0_wasm32.whl":
+        "0b41491ced2cf85046559cac2502e875492cbef6d332addafa680e41be27f0ad",
+    "pyodide/cffi-2.0.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl":
+        "9ae1a61096321cef7248e02293f42d000fa87b73a3e795705a2444290590459d",
+    "pyodide/pycparser-3.0-py3-none-any.whl":
+        "0b4cbc12c42e25df55343342fb0da45b189181e4f360602f9721db2016fc3a4b",
+    "pyodide/six-1.17.0-py2.py3-none-any.whl":
+        "228c50f73aa7addf2c2ccf2979c256802a59ab69cad8152b31b9443cc8140f42",
 }
 
 SWAP = re.compile(r"<!-- demo-swap:(\w+) -->.*?<!-- /demo-swap:\1 -->", re.S)
@@ -82,28 +102,35 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'
        "object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'")
 
 TITLE = f"""<title>RefundRadar — the payments auditor your bank hopes you never run</title>
-<meta name="description" content="The RefundRadar app, running in your browser: audit a bank statement against RBI's failed-payment rules. Nothing is uploaded.">
+<meta name="description" content="RefundRadar in your browser: upload an SBI or HDFC statement to find failed payments, late refunds and the compensation your bank owes. Nothing is uploaded.">
 <meta http-equiv="Content-Security-Policy" content="{CSP}">"""
 
-FOOTER = ("<span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This live demo runs "
-          "entirely in your browser.</span>")
+FOOTER = ("<span>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs entirely in "
+          "your browser.</span>")
 
 TRANSPORT = """<script src="pyodide/pyodide.js"></script>
 <script>
-// The live demo answers every request in this browser: RefundRadar's own routes
+// Every request is answered in this browser: RefundRadar's own routes
 // (refundradar/webapp.py) run under Pyodide, loaded from this site, so a
 // statement chosen here is read in this page and sent nowhere.
 const ENGINE_FILES = [@FILES@];
 let engineReady = false;
+const runtime = loadPyodide({ indexURL: "pyodide/" });
 const engine = (async () => {
-  const py = await loadPyodide({ indexURL: "pyodide/" });
+  const py = await runtime;
   for (const f of ENGINE_FILES)
     py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
   py.runPython("import sys; sys.path.insert(0, '/engine')");
   return py.pyimport("bridge");
 })();
-engine.then(() => { engineReady = true; engineState("ready", "engine ready"); },
-            () => engineState("failed", "the engine couldn't start in this browser"));
+engine.then(() => { engineReady = true; engineState("ready", "ready"); },
+            () => engineState("failed", "couldn't start in this browser"));
+
+// Opening a password-protected file takes Pyodide's build of cryptography,
+// from this site, checked against pyodide-lock.json: fetched the first time a
+// password is typed, so nobody else downloads it.
+let unlocker = null;
+const canUnlock = () => unlocker ??= runtime.then((py) => py.loadPackage("cryptography"));
 
 function engineState(state, words) {
   const el = $("engine-state");
@@ -113,7 +140,7 @@ function engineState(state, words) {
 
 async function send(path, body) {
   if (!engineReady) {
-    setStatus("Starting the audit engine in your browser…");
+    setStatus("Starting RefundRadar in your browser…");
     document.body.classList.add("busy");
   }
   let bridge;
@@ -121,8 +148,17 @@ async function send(path, body) {
     bridge = await engine;
   } catch (_) {
     document.body.classList.remove("busy");
-    throw new Error("The audit engine couldn't start in this browser. " +
-                    "Run RefundRadar on your computer instead: it works the same.");
+    throw new Error("RefundRadar couldn't start in this browser. " +
+                    "Run it on your computer instead: it works the same.");
+  }
+  if (body !== undefined && body.password) {
+    try {
+      await canUnlock();
+    } catch (_) {
+      unlocker = null;
+      throw new Error("The part that opens password-protected files couldn't load. Try " +
+                      "again, or save the file unprotected from Excel and choose that copy.");
+    }
   }
   await new Promise((r) => setTimeout(r, 16));  // let "Auditing…" show before the engine works
   const out = bridge.call(body === undefined ? "GET" : "POST", path,
@@ -133,10 +169,10 @@ async function send(path, body) {
 }
 </script>"""
 
-BANNER = f"""<div class="demo-bar"><span class="pill">Live demo</span><span>RefundRadar runs in
-  this browser: your file is read here and never uploaded &middot;
-  <span id="engine-state" data-state="loading">starting the engine…</span> &middot;
-  <a href="{REPO_URL}">Get it on GitHub</a></span></div>
+BANNER = f"""<div class="demo-bar"><span><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg> RefundRadar
+  runs entirely in this browser: your statement is read on this device and never uploaded
+  &middot; <span id="engine-state" data-state="loading">starting…</span> &middot;
+  <a href="{REPO_URL}">Source on GitHub</a></span></div>
 """
 
 DEMO_CSS = """
@@ -146,9 +182,7 @@ DEMO_CSS = """
   .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
               gap: 4px 10px; min-height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--line);
               background: var(--demo-bar); color: var(--ink-2); font-size: 13px; text-align: center; }
-  .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
-                    color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
-                    letter-spacing: .06em; text-transform: uppercase; }
+  .demo-bar svg { width: 15px; height: 15px; vertical-align: -2px; color: var(--accent); }
   .demo-bar a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
   #engine-state[data-state="ready"] { color: var(--accent); font-weight: 600; }
   #engine-state[data-state="failed"] { color: var(--coral-ink); font-weight: 600; }
@@ -241,6 +275,20 @@ def fetch_runtime() -> None:
                 (DOCS / p).write_bytes(t.extractfile("package/" + p.split("/", 1)[1]).read())
     (DOCS / "pyodide/LICENSE").write_bytes(
         get("https://raw.githubusercontent.com/pyodide/pyodide/main/LICENSE"))
+    lock = json.loads((DOCS / "pyodide/pyodide-lock.json").read_bytes())["packages"]
+    wanted = {lock[n]["file_name"]: lock[n]["sha256"] for n in UNLOCK}
+    with urlopen(PYODIDE_RELEASE, timeout=1800) as r, tarfile.open(fileobj=r, mode="r|bz2") as t:
+        for m in t:  # 340 MB, streamed: only the four wheels are kept
+            name = m.name.rsplit("/", 1)[-1]
+            if name in wanted:
+                data = t.extractfile(m).read()
+                if _sha256(data) != wanted.pop(name):
+                    raise SystemExit(f"{name} does not match pyodide-lock.json")
+                (DOCS / "pyodide" / name).write_bytes(data)
+                if not wanted:
+                    break
+    if wanted:
+        raise SystemExit(f"Not in the Pyodide release: {sorted(wanted)}")
     (DOCS / "vendor").mkdir(exist_ok=True)
     for p, project in PACKAGES.items():
         version = re.search(r"-(\d[\d.]*)-", p).group(1)

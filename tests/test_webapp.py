@@ -1,5 +1,6 @@
 """The web layer: every endpoint, the happy path and the failure path."""
 
+import json
 import re
 from pathlib import Path
 
@@ -19,19 +20,31 @@ def demo_csv():
     return (SAMPLES / "demo_statement.csv").read_text(encoding="utf-8-sig")
 
 
-def test_index_serves_the_app():
+def test_index_serves_the_app_upload_first():
     res = client.get("/")
-    assert res.status_code == 200
-    assert "RefundRadar" in res.text
-    assert "Drop your bank statement" in res.text
+    assert res.status_code == 200 and "RefundRadar" in res.text
+    landing = res.text.split('<section id="screen-drop"', 1)[1].split("</section>", 1)[0]
+    # the first thing to do is give it your statement; the sample is a link after that
+    first = re.search(r"<button[^>]*>(?:<svg.*?</svg>)?([^<]+)", landing).group(1)
+    assert first == "Upload bank statement"
+    assert "Drag &amp; drop your bank statement here" in landing
+    assert landing.index('id="drop"') < landing.index('id="demo-btn" class="link"')
+    assert "<b>SBI</b>" in landing and "<b>HDFC</b>" in landing
+    assert "Other banks and PDF statements aren't supported yet." in landing
 
 
-def test_demo_endpoint(demo_csv):
+def _never_refunded_ref():
+    """The sample's planted payment that never came back, from its answer key."""
+    truth = json.loads((SAMPLES / "ground_truth.json").read_text())
+    [ref] = [i["ref"] for i in truth["incidents"]
+             if i["is_incident"] and i["refund_date"] is None]
+    return ref
+
+
+def test_demo_endpoint_serves_the_sample_without_its_answers(demo_csv):
     res = client.get("/api/demo")
     assert res.status_code == 200
-    data = res.json()
-    assert data["csv"].startswith("Date,Narration")
-    assert len(data["suggested_confirmed"]) == 1
+    assert res.json() == {"csv": demo_csv}  # nothing is confirmed for the user (D6)
 
 
 def test_audit_endpoint_without_confirmation(demo_csv):
@@ -44,7 +57,7 @@ def test_audit_endpoint_without_confirmation(demo_csv):
 
 
 def test_audit_endpoint_with_confirmation(demo_csv):
-    ref = client.get("/api/demo").json()["suggested_confirmed"][0]
+    ref = _never_refunded_ref()
     res = client.post("/api/audit",
                       json={"csv": demo_csv, "confirmed": [ref], "as_of": AS_OF})
     a = res.json()["audit"]
@@ -54,7 +67,7 @@ def test_audit_endpoint_with_confirmation(demo_csv):
 
 
 def test_complaint_endpoint(demo_csv):
-    ref = client.get("/api/demo").json()["suggested_confirmed"][0]
+    ref = _never_refunded_ref()
     res = client.post("/api/complaint", json={
         "csv": demo_csv, "confirmed": [ref], "as_of": AS_OF,
         "name": "Dhanush Jangadi", "account_last4": "2626",
@@ -250,14 +263,106 @@ def test_damaged_or_missing_statement_gets_a_clear_400():
     assert client.post("/api/audit", json={}).status_code == 400
 
 
-def test_sbi_export_is_refused_by_the_web_app():
-    # the SBI reader passes over unreadable rows; the web app shows no partial results
-    sbi = ("Txn Date,Value Date,Description,Ref No./Cheque No.,Branch Code,Debit,Credit,Balance\n"
+# --- SBI through the web app, now that its reader drops nothing (D16) -------
+
+SBI_XLSX = SAMPLES / "sbi_statement.xlsx"
+SBI_AS_OF = "2026-09-01"
+SBI_CSV = ("Txn Date,Value Date,Description,Ref No./Cheque No.,Branch Code,Debit,Credit,Balance\n"
            '3 Feb 2026,3 Feb 2026,TO TRANSFER-UPI/DR/504212345678/SWIGGY.ORDER@ICICI/PAY,'
            '504212345678,1234,450.00,,"39,550.00"\n')
-    res = _upload(sbi.encode(), "sbi.csv")
+
+
+def test_sbi_export_is_audited_by_the_web_app():
+    res = _upload(SBI_XLSX.read_bytes(), "sbi_statement.xlsx", as_of=SBI_AS_OF)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["statement"]["format"] == "SBI"
+    assert "field-tested on one real SBI statement" in data["statement"]["verification"]
+    assert data["summary"]["transactions"] == 20
+    # the ATM cash and the card payment print no reference: offered by their row
+    no_ref = {(c["row"], c["amount"]) for c in data["candidates"] if c["ref"] is None}
+    assert {(5, "5000.00"), (8, "1845.50")} <= no_ref
+
+
+def test_sbi_row_the_reader_cannot_read_is_refused_not_skipped():
+    res = _upload(SBI_CSV.replace("450.00,,", "450.00 Dr,,").encode(), "sbi.csv")
     assert res.status_code == 400
-    assert res.json()["detail"].startswith("This is an SBI export.")
+    assert res.json()["detail"] == "Row 2, Debit: '450.00 Dr' is not a plain positive number."
+
+
+def test_another_banks_export_is_refused_by_name():
+    other = SBI_CSV.replace("Txn Date", "Date").replace("Ref No./Cheque No.", "Chq No")
+    res = _upload(other.encode(), "icici.csv")
+    assert res.status_code == 400
+    assert "not laid out the way SBI or HDFC exports are" in res.json()["detail"]
+
+
+def test_a_pdf_is_refused_with_what_to_download_instead():
+    res = _upload(b"%PDF-1.7\n1 0 obj\n", "statement.pdf")
+    assert (res.status_code, res.json()["detail"]) == (400, (
+        "This is a PDF. RefundRadar reads the Excel or CSV statement your bank "
+        "lets you download, not PDF statements."))
+
+
+# --- Detecting the statement before the audit, and unlocking it (D17) -------
+
+def _check(data: bytes, name: str, **extra):
+    return client.post("/api/statement", json={
+        "file": base64.b64encode(data).decode(), "filename": name, **extra})
+
+
+def _locked(password="Sample@2626") -> bytes:
+    import io
+    from msoffcrypto.format.ooxml import OOXMLFile
+    out = io.BytesIO()
+    OOXMLFile(io.BytesIO(SBI_XLSX.read_bytes())).encrypt(password, out)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize("name, bank, kind, count, first, last", [
+    ("sbi_statement.xlsx", "SBI", "Excel workbook (.xlsx)", 20, "2026-06-01", "2026-08-10"),
+    ("hdfc_statement.xls", "HDFC", "Excel 97-2003 workbook (.xls)", 22, "2026-02-01", "2026-03-31"),
+    ("hdfc_statement.csv", "HDFC", "CSV or delimited text", 22, "2026-02-01", "2026-03-31"),
+])
+def test_statement_is_identified_before_it_is_audited(name, bank, kind, count, first, last):
+    res = _check((SAMPLES / name).read_bytes(), name)
+    assert res.status_code == 200
+    got = res.json()
+    assert (got["locked"], got["bank"], got["file_type"], got["transactions"],
+            got["first"], got["last"]) == (False, bank, kind, count, first, last)
+    assert got["payments"] + got["credits"] == count and got["unlocked_file"] is None
+    assert "audit" not in got  # nothing is analysed until the user asks
+
+
+def test_the_sample_statement_is_identified_as_generic_csv(demo_csv):
+    got = client.post("/api/statement", json={"csv": demo_csv}).json()
+    assert (got["bank"], got["file_type"], got["locked"]) == ("generic", "CSV or delimited text", False)
+
+
+def test_a_locked_statement_asks_for_its_password():
+    locked = _locked()
+    got = _check(locked, "sbi_statement.xlsx").json()
+    assert got == {"locked": True, "wrong_password": False, "filename": "sbi_statement.xlsx"}
+    wrong = _check(locked, "sbi_statement.xlsx", password="not it").json()
+    assert (wrong["locked"], wrong["wrong_password"]) == (True, True)
+    # auditing it without opening it first is refused, not guessed at
+    res = _upload(locked, "sbi_statement.xlsx")
+    assert res.status_code == 400 and "password-protected" in res.json()["detail"]
+
+
+def test_the_password_opens_it_once_and_the_open_file_is_audited():
+    got = _check(_locked(), "sbi_statement.xlsx", password="Sample@2626").json()
+    assert (got["locked"], got["bank"], got["transactions"]) == (False, "SBI", 20)
+    opened = base64.b64decode(got["unlocked_file"])
+    assert opened == SBI_XLSX.read_bytes()  # the workbook inside, byte for byte
+    assert "Sample@2626" not in json.dumps(got)  # the password is never sent back
+    res = _upload(opened, "sbi_statement.xlsx", as_of=SBI_AS_OF)
+    assert res.status_code == 200 and res.json()["summary"]["transactions"] == 20
+
+
+def test_an_unreadable_statement_is_refused_at_detection():
+    res = _check(b"Dear diary, nothing to see.\n", "notes.txt")
+    assert res.status_code == 400 and "Could not find a statement table in notes.txt" in res.json()["detail"]
 
 
 def test_complaint_from_an_uploaded_hdfc_xls():

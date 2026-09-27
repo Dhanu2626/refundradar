@@ -17,8 +17,14 @@ class EncryptedStatement(Exception):
     """File is password-protected; ask the user for the document password."""
 
 
+class WrongPassword(EncryptedStatement):
+    """The password given doesn't open the file."""
+
+
 def sniff(data: bytes) -> str:
-    """Return xlsx | xls | encrypted | html | text for a file's raw bytes."""
+    """Return xlsx | xls | encrypted | html | pdf | text for a file's raw bytes."""
+    if data[:5] == b"%PDF-":
+        return "pdf"
     if data[:4] == ZIP_MAGIC:
         return "xlsx"
     if data[:8] == OLE_MAGIC:
@@ -35,10 +41,18 @@ def sniff(data: bytes) -> str:
 def decrypt(data: bytes, password: str) -> bytes:
     """Decrypt a password-protected Office file to its inner package bytes."""
     import msoffcrypto
+    from msoffcrypto.exceptions import DecryptionError, InvalidKeyError
     f = msoffcrypto.OfficeFile(io.BytesIO(data))
-    f.load_key(password=password)
     out = io.BytesIO()
-    f.decrypt(out)
+    try:
+        f.load_key(password=password)
+        f.decrypt(out)
+    except (DecryptionError, InvalidKeyError):
+        raise WrongPassword(
+            "That password doesn't open this statement. Use the password your "
+            "bank set for the file (its download page shows the format), not "
+            "your login password."
+        ) from None
     return out.getvalue()
 
 
@@ -91,6 +105,11 @@ def load_rows(data: bytes, password: str | None = None) -> list[list]:
         for r in range(ws.nrows):
             rows.append([ws.cell(r, c).value for c in range(ws.ncols)])
         return rows
+    if kind == "pdf":
+        raise ValueError(
+            "This is a PDF. RefundRadar reads the Excel or CSV statement your bank "
+            "lets you download, not PDF statements."
+        )
     raise ValueError(
         f"Unsupported statement format ({kind}). Export as Excel or CSV."
     )

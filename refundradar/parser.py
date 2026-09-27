@@ -3,7 +3,9 @@
 Supports the generic CSV format used by samples/demo_statement.csv (Date,
 Narration,Ref,Debit,Credit,Balance with dd-mm-yyyy dates) plus bank exports:
 SBI and HDFC each get a small row mapper. All of them normalize into the same
-schema so nothing downstream cares where the data came from.
+schema so nothing downstream cares where the data came from. Both bank
+mappers read strictly: a row they can't account for stops the audit, naming
+the row, and the rows must reproduce the bank's own running balance.
 """
 
 import csv
@@ -50,75 +52,129 @@ def parse_generic_csv(path: str | Path) -> list[Transaction]:
     return parse_generic_csv_text(Path(path).read_text(encoding="utf-8-sig"))
 
 
-def _amount(value) -> "Decimal | None":
-    from decimal import Decimal, InvalidOperation
-    text = str(value).replace(",", "").replace("₹", "").strip()
-    if not text or text in ("-", "None"):
-        return None
-    try:
-        d = Decimal(text)
-    except InvalidOperation:
-        return None
-    return d if d != 0 else None
+NO_BANK_TABLE = ("Could not find an SBI or HDFC transaction table in this file. "
+                 "RefundRadar reads SBI and HDFC statement exports, and CSV with the "
+                 "columns Date, Narration, Ref, Debit, Credit, Balance.")
+
+
+def _sbi_columns(row: list) -> dict[str, int] | None:
+    """Column indexes if `row` heads a table SBI's way, else None.
+
+    SBI heads the table Txn Date | Value Date | Description | Ref
+    No./Cheque No. | Branch Code | Debit | Credit | Balance; the real export
+    field-tested on 2026-07-24 said Details for Description. Columns are
+    found by header NAME, not position, so layout drift across portal
+    versions doesn't break the mapping.
+    """
+    cols = {}
+    for i, cell in enumerate(row):
+        n = str(cell).strip().lower() if cell is not None else ""
+        if "txn date" in n or n == "date" or "transaction date" in n:
+            cols.setdefault("date", i)
+        elif ("description" in n or "narration" in n
+              or "particulars" in n or "detail" in n):
+            cols["narration"] = i
+        elif "ref" in n or "cheque" in n:
+            cols["ref"] = i
+        elif "debit" in n:
+            cols["debit"] = i
+        elif "credit" in n:
+            cols["credit"] = i
+        elif "balance" in n:
+            cols["balance"] = i
+    if {"date", "narration", "debit", "credit", "balance"} <= set(cols):
+        return cols
+    return None
+
+
+def _is_sbi(rows: list[list], header_idx: int, cols: dict[str, int]) -> bool:
+    """Whether a Date / Debit / Credit table is SBI's and not another bank's:
+    SBI names its reference column Ref No./Cheque No., and prints its IFSC
+    (SBIN0...) or its name above the table."""
+    header = rows[header_idx]
+    ref = str(header[cols["ref"]]).lower() if "ref" in cols else ""
+    if "ref" in ref and "cheque" in ref:
+        return True
+    above = " ".join(str(c) for r in rows[:header_idx] for c in r if c is not None).lower()
+    return bool(re.search(r"\bsbin0|state bank of india", above))
 
 
 def parse_sbi_rows(rows: list[list]) -> list[Transaction]:
     """Map SBI's spreadsheet layout onto the canonical schema.
 
     SBI statements carry preamble rows (account holder, branch, period)
-    before a header row like: Txn Date | Value Date | Description |
-    Ref No./Cheque No. | Branch Code | Debit | Credit | Balance.
-    Columns are located by header NAME, not position, so layout drift
-    across portal versions doesn't break the mapping.
+    before the header, and a line of text after the table. Inside the table
+    the only rows passed over are blank rows, a repeated header, lines of
+    text with no amount (a note, a wrapped description, the footer), and
+    dated rows that move no money. Any other row stops the audit, naming the
+    row, the column and the cell: an amount on a row without a readable
+    date, an amount or Balance that isn't a plain number, both amounts
+    filled. The rows must reproduce SBI's own Balance column (DECISIONS.md,
+    D16). A silently dropped row could be the very refund being audited.
     """
     from refundradar.formats import _cell_date
 
-    header_idx, cols = None, {}
-    for idx, row in enumerate(rows):
-        names = [str(c).strip().lower() if c is not None else "" for c in row]
-        if any("date" in n for n in names) and any("debit" in n for n in names):
-            for i, n in enumerate(names):
-                if "txn date" in n or n == "date" or "transaction date" in n:
-                    cols.setdefault("date", i)
-                elif ("description" in n or "narration" in n
-                      or "particulars" in n or "detail" in n):
-                    cols["narration"] = i
-                elif "ref" in n or "cheque" in n:
-                    cols["ref"] = i
-                elif "debit" in n:
-                    cols["debit"] = i
-                elif "credit" in n:
-                    cols["credit"] = i
-                elif "balance" in n:
-                    cols["balance"] = i
-            if {"date", "narration", "debit", "credit"} <= set(cols):
-                header_idx = idx
-                break
-            cols = {}
+    header_idx, cols = next(
+        ((idx, c) for idx, c in enumerate(map(_sbi_columns, rows)) if c),
+        (None, None),
+    )
     if header_idx is None:
+        raise ValueError(NO_BANK_TABLE)
+    header = rows[header_idx]
+    name = lambda key: _column_name(header, cols[key])
+    if not _is_sbi(rows, header_idx, cols):
         raise ValueError(
-            "Could not find SBI's transaction table header (Txn Date / "
-            "Description / Debit / Credit) in this file."
+            f"This statement's table ({name('date')} / {name('narration')} / "
+            f"{name('debit')} / {name('credit')}) is not laid out the way SBI or HDFC "
+            "exports are. RefundRadar reads SBI and HDFC statements; other banks "
+            "aren't supported yet."
         )
 
     txns = []
-    for row in rows[header_idx + 1:]:
-        get = lambda key: row[cols[key]] if key in cols and cols[key] < len(row) else None
-        txn_date = _cell_date(get("date")) if get("date") is not None else None
+    ledger = []  # (row number, balance change, printed Balance)
+    for idx in range(header_idx + 1, len(rows)):
+        row, row_no = rows[idx], idx + 1
+        cells = ["" if c is None else str(c).strip() for c in row]
+        if not any(ch.isalnum() for c in cells for ch in c) or _sbi_columns(row):
+            continue  # blank row, separator, or the header repeated
+        get = lambda key: row[cols[key]] if cols[key] < len(row) else None
+        date_text = "" if get("date") is None else str(get("date")).strip()
+        txn_date = _cell_date(get("date")) if date_text else None
         if txn_date is None:
-            continue
-        debit, credit = _amount(get("debit")), _amount(get("credit"))
+            if all(str(get(k) or "").strip() in ("", "-") for k in ("debit", "credit")):
+                continue  # a line of text: a note, a wrapped description, the footer
+            raise ValueError(
+                f"Row {row_no}, {name('date')}: expected a date, found "
+                f"{date_text!r} on a row with an amount. Stopping rather than "
+                "skipping a row that could be a payment or its refund."
+            )
+        debit = _number(get("debit"), row_no, name("debit")) or None
+        credit = _number(get("credit"), row_no, name("credit")) or None
+        if debit is not None and credit is not None:
+            raise ValueError(
+                f"Row {row_no}: both {name('debit')} ({debit}) and "
+                f"{name('credit')} ({credit}) are filled, so the direction of "
+                "the money is unclear."
+            )
+        balance = _number(get("balance"), row_no, name("balance"), signed=True)
         if debit is None and credit is None:
-            continue
+            ledger.append((row_no, Decimal(0), balance))
+            continue  # a dated line that moved no money, such as an opening balance
         narration = str(get("narration") or "").strip()
-        t = make_transaction(txn_date, debit if debit is not None else credit,
-                             debit is not None, narration,
-                             balance=_amount(get("balance")), bank="SBI")
-        ref_cell = str(get("ref") or "").strip()
+        t = make_transaction(txn_date, debit or credit, debit is not None,
+                             narration, balance=balance, bank="SBI")
+        ref_cell = str(get("ref") or "").strip() if "ref" in cols else ""
         if ref_cell and ref_cell.upper() not in ("", "-", "NONE", "TRANSFER TO", "TRANSFER FROM"):
             if t.ref is None:
                 t.ref = ref_cell
         txns.append(t)
+        ledger.append((row_no, -t.amount if t.is_debit else t.amount, balance))
+    if not txns:
+        raise ValueError(
+            "Found SBI's transaction table but no transactions in it. The "
+            "export layout may have changed."
+        )
+    _check_balances(txns, ledger, name("balance"))
     return txns
 
 
@@ -183,10 +239,10 @@ def _set_hdfc_refs(t: Transaction, col_ref: str | None) -> None:
     t.alt_ref = col_ref
 
 
-def _hdfc_number(cell, row_no: int, column: str, *, signed: bool = False) -> Decimal | None:
-    """A numeric HDFC cell: None when blank, else a Decimal; anything else raises.
+def _number(cell, row_no: int, column: str, *, signed: bool = False) -> Decimal | None:
+    """A numeric statement cell: None when blank, else a Decimal; anything else raises.
 
-    Stricter than _amount on purpose: text such as "450.00 Cr" raises rather
+    Strict on purpose: text such as "450.00 Cr" raises rather
     than reading as blank, because a row read as blank is a dropped row, and
     the dropped row could be the refund. Amounts must be positive; a Closing
     Balance may be negative (an overdraft).
@@ -219,6 +275,26 @@ def _balance_break(ledger) -> tuple[int, int, Decimal, Decimal] | None:
             return row_no, prev_row, prev + moved, printed
         prev, prev_row, moved = printed, row_no, Decimal(0)
     return None
+
+
+def _check_balances(txns: list[Transaction], ledger, column: str) -> None:
+    """Stop unless the rows reproduce the bank's own running balance.
+
+    Walks the rows oldest-first. Only the dates may say an export runs
+    newest-first: accepting whichever direction adds up would let a short
+    statement pass by coincidence.
+    """
+    dates = [t.txn_date for t in txns]
+    newest_first = dates != sorted(dates) and dates == sorted(dates, reverse=True)
+    broken = _balance_break(ledger[::-1] if newest_first else ledger)
+    if broken is not None:
+        row_no, prev_row, expected, printed = broken
+        raise ValueError(
+            f"Row {row_no}, {column}: the statement says {printed:,.2f}, "
+            f"but row {prev_row}'s balance and the rows between lead to "
+            f"{expected:,.2f}, so a row is missing, duplicated or misread. "
+            "Stopping rather than auditing a statement that doesn't add up."
+        )
 
 
 def _column_name(header: list, i: int) -> str:
@@ -295,15 +371,15 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
                 f"{date_text!r}. Stopping rather than skipping a row that could "
                 "be a payment or its refund."
             )
-        debit = _hdfc_number(get("debit"), row_no, name("debit")) or None
-        credit = _hdfc_number(get("credit"), row_no, name("credit")) or None
+        debit = _number(get("debit"), row_no, name("debit")) or None
+        credit = _number(get("credit"), row_no, name("credit")) or None
         if debit is not None and credit is not None:
             raise ValueError(
                 f"Row {row_no}: both {name('debit')} ({debit}) and "
                 f"{name('credit')} ({credit}) are filled, so the direction of "
                 "the money is unclear."
             )
-        balance = _hdfc_number(get("balance"), row_no, name("balance"), signed=True)
+        balance = _number(get("balance"), row_no, name("balance"), signed=True)
         if debit is None and credit is None:
             # A dated line that moved no money, such as an opening balance, is
             # only safe to pass over if no other column holds a stray amount.
@@ -329,20 +405,7 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
             "Found HDFC's transaction table but no transactions in it. The "
             "export layout may have changed."
         )
-    # Walk the rows oldest-first. Only the dates may say an export runs
-    # newest-first: accepting whichever direction adds up would let a
-    # short statement pass by coincidence.
-    dates = [t.txn_date for t in txns]
-    newest_first = dates != sorted(dates) and dates == sorted(dates, reverse=True)
-    broken = _balance_break(ledger[::-1] if newest_first else ledger)
-    if broken is not None:
-        row_no, prev_row, expected, printed = broken
-        raise ValueError(
-            f"Row {row_no}, {name('balance')}: the statement says {printed:,.2f}, "
-            f"but row {prev_row}'s balance and the rows between lead to "
-            f"{expected:,.2f}, so a row is missing, duplicated or misread. "
-            "Stopping rather than auditing a statement that doesn't add up."
-        )
+    _check_balances(txns, ledger, name("balance"))
     return txns
 
 

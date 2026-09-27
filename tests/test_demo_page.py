@@ -86,6 +86,27 @@ def test_the_vendored_runtime_is_the_pinned_one():
     assert vendored == set(bd.RUNTIME)  # nothing unpinned rides along
 
 
+def test_what_opens_locked_files_is_pyodides_own_build_fetched_only_when_needed():
+    lock = json.loads((DOCS / "pyodide" / "pyodide-lock.json").read_text())["packages"]
+    for name in bd.UNLOCK:  # the wheels pyodide.loadPackage fetches, as its lock names them
+        wheel = f"pyodide/{lock[name]['file_name']}"
+        assert bd.RUNTIME[wheel] == lock[name]["sha256"], name
+    assert set(bd.UNLOCK) == {"cryptography", *lock["cryptography"]["depends"],
+                              *lock["cffi"]["depends"]}
+    startup = re.search(r"const ENGINE_FILES = \[(.*?)\];", PAGE).group(1)
+    assert "cryptography" not in startup  # not in what every visitor downloads
+    assert 'py.loadPackage("cryptography")' in PAGE and "body.password" in PAGE
+
+
+def test_the_page_presents_the_product_not_a_tour():
+    banner = PAGE.split('<div class="demo-bar">', 1)[1].split("</div>", 1)[0]
+    assert "Live demo" not in PAGE and "never uploaded" in banner
+    # the same doorway as the app: upload first, the synthetic sample only a link after it
+    landing = PAGE.split('<section id="screen-drop"', 1)[1].split("</section>", 1)[0]
+    assert landing.index("Upload bank statement") < landing.index('id="demo-btn" class="link"')
+    assert "suggested_confirmed" not in PAGE  # nothing is answered for the visitor
+
+
 # ------------------------------------------------ the engine answers as the app does
 
 DRIVER = """
@@ -118,15 +139,35 @@ def _xlsx(data: bytes) -> bytes:
     return buf.getvalue()
 
 
+def _locked(data: bytes) -> bytes:
+    from msoffcrypto.format.ooxml import OOXMLFile
+    out = io.BytesIO()
+    OOXMLFile(io.BytesIO(data)).encrypt("Sample@2626", out)
+    return out.getvalue()
+
+
 def _requests():
     hdfc = (SAMPLES / "hdfc_statement.csv").read_bytes()
     xls = (SAMPLES / "hdfc_statement.xls").read_bytes()
+    sbi = (SAMPLES / "sbi_statement.xlsx").read_bytes()
     demo = (SAMPLES / "demo_statement.csv").read_text(encoding="utf-8-sig")
     up = lambda data, name, **kw: {"file": base64.b64encode(data).decode(), "filename": name,
                                    "as_of": "2026-04-30", **kw}
+    look = lambda data, name: {"file": base64.b64encode(data).decode(), "filename": name}
     claim = {"name": "A. Sample Customer", "account_last4": "2626", "contact": "sample@example.com"}
     return [
         ("GET", "/api/demo", None),
+        # what the file is, before any audit
+        ("POST", "/api/statement", look(sbi, "sbi_statement.xlsx")),
+        ("POST", "/api/statement", look(xls, "hdfc_statement.xls")),
+        ("POST", "/api/statement", look(DELIMITED, "hdfc_delimited.txt")),
+        ("POST", "/api/statement", {"csv": demo}),
+        ("POST", "/api/statement", look(_locked(sbi), "sbi_statement.xlsx")),  # asks for its password
+        ("POST", "/api/statement", look(b"Dear diary, nothing to see.\n", "notes.txt")),
+        ("POST", "/api/audit", {**up(sbi, "sbi_statement.xlsx", confirmed_rows=[5]),
+                                "as_of": "2026-09-01"}),
+        ("POST", "/api/complaint", {**up(sbi, "sbi_statement.xlsx", confirmed_rows=[5, 8],
+                                         pairs=[[3, 6]]), "as_of": "2026-09-01", **claim}),
         ("POST", "/api/audit", {"csv": demo, "confirmed": ["444363915096"], "as_of": "2026-07-24"}),
         ("POST", "/api/audit", up(hdfc, "hdfc_statement.csv")),
         ("POST", "/api/audit", up(xls, "hdfc_statement.xls", confirmed=["607912345678"], confirmed_rows=[9])),
