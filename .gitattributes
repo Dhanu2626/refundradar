@@ -1,0 +1,4 @@
+# The live demo's runtime is pinned by SHA-256 (tools/build_demo_page.py):
+# check it out byte for byte, never with converted line endings.
+docs/pyodide/** -text
+docs/vendor/** -text
