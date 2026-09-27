@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from refundradar.parser import _hdfc_number, _hdfc_ref, parse_hdfc_rows, parse_statement_file
+from refundradar.parser import _number, _hdfc_ref, parse_hdfc_rows, parse_statement_file
 from refundradar.reconcile import CONFIRM, LATE, reconcile
 
 SAMPLE = Path(__file__).resolve().parent.parent / "samples" / "hdfc_statement.csv"
@@ -170,7 +170,7 @@ def test_sample_confirmed_failure_is_claimed():
     ("2,000.00", "2000.00"), ("12.345", "12.345"),  # text is kept exactly, never rounded
 ])
 def test_amounts_read_in_rupees_and_paise_and_are_never_rounded(cell, amount):
-    assert str(_hdfc_number(cell, 3, "Withdrawal Amt.")) == amount
+    assert str(_number(cell, 3, "Withdrawal Amt.")) == amount
 
 
 def test_excel_export_gives_the_same_letter_as_the_csv_export():

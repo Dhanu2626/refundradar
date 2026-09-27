@@ -2,12 +2,12 @@
 
 ![Part of Dhanush Labs](https://img.shields.io/badge/PART_OF-DHANUSH_LABS-6366F1?style=flat-square&labelColor=0A0B0D)
 ![Status](https://img.shields.io/badge/STATUS-V0.9_BETA-14B8A6?style=flat-square&labelColor=0A0B0D)
-![Tests](https://img.shields.io/badge/TESTS-210_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
+![Tests](https://img.shields.io/badge/TESTS-262_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
 ![License](https://img.shields.io/badge/LICENSE-MIT-6366F1?style=flat-square&labelColor=0A0B0D)
 
 ### The Payments Auditor Your Bank Hopes You Never Run
 
-**[▶ Try the live demo →](https://dhanu2626.github.io/refundradar/)** — a real audit of a synthetic statement. No install, no signup. The demo page cannot receive a file.
+**[▶ Try the live demo →](https://dhanu2626.github.io/refundradar/)** — the RefundRadar app itself, running in your browser: upload your SBI or HDFC statement and it finds the failed payments, the late refunds and what your bank owes you. No install, no signup, nothing uploaded.
 
 ---
 
@@ -38,7 +38,7 @@ python -m venv .venv
 .venv\Scripts\python -m refundradar serve
 ```
 
-Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `.xls`, `.xlsx`, or the Delimited `.txt`), or "Try with a demo statement." Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
+Open `http://127.0.0.1:8626` → upload or drop an SBI export (`.xlsx`, `.xls`, `.csv`; the password-protected download opens with its password) or an HDFC export (`.xls`, `.xlsx`, `.csv`, or the Delimited `.txt`). RefundRadar first shows what it found in the file (bank, transactions, dates) and analyzes it when you say so. No statement to hand? "Try the sample statement" runs the same steps on synthetic data. Or via CLI: `python -m refundradar audit mystatement.xlsx` (`--password` for SBI-locked files).
 
 ## Features
 
@@ -55,7 +55,14 @@ Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `
 
 ## Interactive Demo
 
-**[dhanu2626.github.io/refundradar](https://dhanu2626.github.io/refundradar/)** — runs entirely against a synthetic statement; there is no upload endpoint on the demo build, so no file you provide can leave your browser.
+**[dhanu2626.github.io/refundradar](https://dhanu2626.github.io/refundradar/)** is the app you run locally, not a copy: the same page, and the same Python code (`refundradar/`) running in your browser on [Pyodide](https://pyodide.org), which the site serves itself. Upload your statement, check what was detected, analyze it, answer only the questions the rules require, and download the letter. The synthetic sample is a secondary link for trying it without a statement, and nothing in it is answered for you.
+
+- **Nothing is uploaded.** Your file is read inside the page. There is no server behind it, and the page's Content-Security-Policy lets it connect only to its own site, so the browser itself refuses to send anything elsewhere.
+- **The first visit downloads about 14 MB** (the Python runtime), cached after that. Audits then run on your device.
+- **SBI's password-protected download opens in the page.** The password is used once, on your device, and never stored; the code that decrypts (Pyodide's `cryptography`, about 2.4 MB) downloads only when you type one.
+- **HDFC reading is synthetically tested**, not yet verified against a real HDFC export, and the page says so beside every HDFC result. SBI's layout was field-tested on one real statement; its strict row checks (D16) are synthetically tested.
+- **Other banks and PDF statements are refused by name**, not guessed at.
+- **Run the demo locally:** `python tools/build_demo_page.py`, then `python -m http.server -d docs 8000` and open `http://localhost:8000` (it needs http, not a `file://` path).
 
 ## Engineering Decisions
 
@@ -67,6 +74,9 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 | NEFT excluded | Falls under a different regime (penal interest at repo + 2%) |
 | Ambiguous UPI defaults to the longer deadline | Keeps the claim undisputable |
 | Inferred reversals never auto-claimed | User confirms first, even when detectable from amount/timing |
+| Payments with no reference are confirmed by their row | The statement prints nothing to confirm by; none is invented, and the letter says "not printed on statement" |
+| SBI is read strictly, like HDFC | A row it can't read stops the audit and is named; the rows must reproduce SBI's balance, so none is silently dropped |
+| The file is identified before it is analyzed | You see the bank, the transaction count and the dates first; a locked file's password is used once and kept nowhere |
 
 > [!WARNING]
 > This is a self-help tool applying published RBI circulars to your own statement. It is **not legal advice** — verify every figure before submitting a complaint.
@@ -77,7 +87,7 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 refundradar/
 ├── refundradar/           parsing, reconciliation, RBI rule engine, complaint generator
 ├── rules/DECISIONS.md     every judgment call, written down
-├── tests/                 210 tests incl. planted-ground-truth reconciliation exam
+├── tests/                 262 tests incl. planted-ground-truth reconciliation exam
 └── CONTRIBUTING.md        how to add a bank parser
 ```
 
@@ -89,13 +99,13 @@ Python · pandas (statement parsing) · pytest
 
 | Statement format | Status |
 |---|---|
-| SBI Excel/CSV (incl. password-protected; CLI) | ✅ field-tested on a real statement |
+| SBI Excel/CSV (incl. password-protected; web app, live demo and CLI) | ✅ layout field-tested on a real statement; strict row checks (D16) synthetic-tested |
 | HDFC Excel / Delimited export (web app and CLI) | 🧪 synthetic-tested — awaiting a real-statement field test |
 | Generic CSV | ✅ |
 | Other banks | 🚧 in progress |
 | PDF statements | 🚧 planned |
 
-210 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
+262 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
 
 ## Future Improvements
 

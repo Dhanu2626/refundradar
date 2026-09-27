@@ -70,7 +70,8 @@ reconciliation finds counterparty signals that raise confidence.
 own. A failed payment that was never reversed is statistically identical, on the
 statement, to a successful payment. Claiming one without evidence would be a guess
 dressed as an audit. The UI therefore asks the user to search and confirm the
-payment they know failed; only confirmed refs enter the claim.
+payment they know failed; only confirmed payments enter the claim, confirmed by their
+reference, or by their row when the statement prints none (D14).
 
 **Why:** every claim in the complaint letter must survive the bank's scrutiny. One
 fabricated incident poisons the credibility of all the real ones.
@@ -242,3 +243,125 @@ It overstates only if the user picks a refund for a payment that did not fail, w
 is outside what a statement can catch (as in D6). The UI offers only candidates the
 reconciler computed; the API re-checks the structure but not the candidate list, so a
 hand-built request is trusted like any confirmation.
+
+## D14 — A payment printed without a reference is confirmed by its row (2026-09-27)
+
+**Decision:** a debit the statement prints with no reference at all (an ATM cash
+withdrawal, some PoS card payments, an ACH debit) can be confirmed as failed by its
+row: its position among the statement's transactions, the same row identity the web
+app already uses to pick refunds (D13). The API takes it as `confirmed_rows` and
+accepts only a debit with no reference, on a channel the 2019 circular covers, each
+row once; anything else is refused whole. The reconciler then treats that payment
+exactly like one confirmed by its reference: a single later reversal settles it,
+competing credits are asked about, and none means never refunded. The letter prints
+"not printed on statement" in the Reference column.
+
+**Why:** confirmation was keyed by reference, so these payments could never be
+offered or claimed, although ATM cash not dispensed and a PoS charge without a slip
+are scenarios the circular covers (4 of 13 debits in the synthetic HDFC sample, 21 of
+219 in the demo). A reference made up to fill the gap would be a claim the bank could
+reject on sight; the row names the payment without inventing anything.
+
+**Risk:** a row number means something only for the file it came from. The browser
+re-sends the same file with every answer and a new file clears every confirmation, so
+a row is never read against another statement. Two payments alike in every printed
+detail are told apart only by their row, which the UI shows as "transaction N".
+Nothing changes for payments with a reference, and nothing is confirmed without the
+user saying so (D6).
+
+## D15 — The live demo is the app, run in the visitor's browser (2026-09-27)
+
+**Decision:** the public demo (docs/, GitHub Pages) is the web app itself. Its page is
+refundradar/static/index.html with three blocks swapped: the title, a footer line, and
+`send()`, which hands each request to the app's own routes (refundradar/webapp.py)
+running under Pyodide in the browser instead of on a server. The runtime, the
+pure-Python spreadsheet readers and PyYAML's pure-Python half are vendored under docs/
+and pinned by SHA-256, so the page loads nothing from any other site. Two small
+stand-ins let webapp.py import without FastAPI or pydantic (tools/demo_engine/). This
+replaces the 2026-07-24 demo, a static page with one frozen audit and no way to take a
+file.
+
+**Why:** the frozen page showed a picture of one result, not the product: no upload, no
+questions, no letter from your own answers, and it drifted from the app with every
+change. Running the app's own code keeps one code path, and the demo now proves the
+thing the product promises: a statement can be audited without leaving the device.
+
+**Evidence status:** CI runs the demo's engine in an isolated interpreter that can
+reach only the files the demo ships, and requires every answer, from uploads in all
+four formats to refusals, to equal the app's (tests/test_demo_page.py). Browser runs
+from the README link, desktop and 390px: the uploads, both kinds of confirmation and
+the letter match the local app, and no request leaves the site. *Not verified:* the
+live GitHub Pages site itself, which this sandbox cannot reach (its MIME types for
+.mjs and .wasm are assumed from Pages' defaults).
+
+**Risk:** the demo page can now read a file, so the guarantee moved from "cannot
+receive" to "cannot send": the Content-Security-Policy allows connections only to the
+site itself and forbids form submission, and the browser enforces that whatever a
+script tries. The first visit costs about 14 MB. The vendored runtime is trusted as
+pinned; upgrading it means fetching and re-pinning it (build_demo_page.py
+--fetch-runtime).
+
+## D16 — SBI is read strictly, and so the web app reads it (2026-09-27)
+
+**Decision:** the SBI reader follows D10. Inside the table the only rows passed over
+are blank rows, a repeated header, lines of text with no amount (a note, a wrapped
+description, the footer) and dated rows that move no money. Any other row stops the
+audit, naming the row, the column and the cell: an amount on a row without a readable
+date, an amount or Balance that isn't a plain number, both Debit and Credit filled.
+The parsed rows must reproduce SBI's own Balance column. A table is read as SBI's only
+when it carries SBI's marks, its Ref No./Cheque No. column or SBI's IFSC (SBIN0...) or
+name above it; a Date / Debit / Credit table from another bank is refused by name,
+not read as SBI's. With that, the web app and the live demo accept SBI files, which
+they refused while the reader passed over rows it couldn't read.
+
+**Why:** a lenient reader fails silently: a refund row it can't read disappears and the
+audit still prints a confident total. The old reader dropped any row whose date or
+amount it couldn't parse, so the web app refused SBI outright, and the bank the
+product was field-tested on was the one bank its web app couldn't read.
+
+**Evidence status:**
+- *Confirmed against real SBI data (2026-07-24, 106 transactions, via the command
+  line):* the header names, with Details for Description; text dates like 3 Feb 2026;
+  WDL TFR / DEP TFR narrations; reversals under a fresh reference (UPI/REF, D9); the
+  password-protected OLE2 download.
+- *Not yet run on a real file:* the strict row checks and the balance check. The real
+  statement was read by the lenient reader, so whatever rows it passed over are
+  unknown.
+
+**Risk:** the first real SBI statement through the strict reader may stop on a row the
+old reader passed over without a word, such as a totals line or a balance printed with
+Cr. That is the intended failure: the error names the row, and the fix belongs in
+`parse_sbi_rows` with a synthetic test in that shape. A table from another bank that
+prints SBI's column name would be read as SBI's; the balance check still has to pass.
+
+## D17 — The file is identified before it is analysed; a locked file is opened once (2026-09-27)
+
+**Decision:** choosing a file no longer runs the audit. `/api/statement` reads it with
+the same strict readers and answers only what it is: the bank, the file type, how
+many transactions it read, and over which dates. The page shows that, and the audit
+runs when the user presses Analyze statement. A password-protected file (SBI's
+download) is recognised by its bytes; the user types its password, the same endpoint
+opens the file and hands it back open, and the page works from the opened file from
+then on, so the password is used once and kept nowhere. The synthetic sample goes
+through the same two steps, and nothing is confirmed for the user: `/api/demo` no
+longer sends the sample's answer key. In the live demo, the code that decrypts
+(Pyodide's cryptography build, about 2.4 MB, checked against pyodide-lock.json) is
+fetched from the site only when a password is typed.
+
+**Why:** the user should see that RefundRadar read their statement, the right one and
+all of it, before trusting what it says about it; a wrong file or a partial read is
+caught at the door, before any number is shown. Opening SBI's download in the app is
+what the 2026-07-24 field test called for: for real users the wall is opening the
+file, not parsing it. Pre-confirming the sample's never-refunded payment made the
+sample a tour instead of a trial.
+
+**Evidence status:** the unlock path is tested with msoffcrypto's own encryption of the
+synthetic SBI sample (tests/test_webapp.py, tests/test_sbi.py) and, in the live demo,
+in Chromium from the README link: wrong password refused, the right one opens it, the
+cryptography wheels fetched only then and only from the site.
+
+**Risk:** the opened workbook lives in the page's memory like the file itself did. The
+password crosses to the local server (127.0.0.1) or stays in the page (live demo) and
+is never logged or returned. A browser that can't run Pyodide's cryptography can't
+open a locked file in the live demo; it is told to save the file unprotected from
+Excel or run RefundRadar on the computer.

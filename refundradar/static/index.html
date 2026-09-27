@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0b0d">
-<!-- The public demo page (docs/index.html) is built from this file by
-     tools/build_demo_page.py: it keeps everything here except the blocks between
-     demo-swap markers, which it replaces with versions that take no file. -->
+<!-- The public live demo (docs/index.html) is this page, built by
+     tools/build_demo_page.py. It keeps everything here except the blocks between
+     demo-swap markers: its title, its footer line, and send(), which there hands
+     each request to the app's own routes running in the visitor's browser. -->
 <!-- demo-swap:title --><title>RefundRadar</title><!-- /demo-swap:title -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
@@ -164,12 +165,20 @@
           background: var(--slate-soft); color: var(--slate); font-size: 12.5px; font-weight: 600;
           white-space: nowrap; }
   .drop .note { max-width: 540px; margin: 12px auto 0; font-size: 13px; color: var(--muted); }
-  .drop .choose { margin-top: 18px; }
+  .drop .choose { margin-top: 12px; }
+  .banks { display: grid; gap: 8px; max-width: 580px; margin: 22px auto 0; padding: 0;
+           list-style: none; text-align: left; }
+  .banks li { display: flex; align-items: baseline; gap: 12px; padding: 10px 14px;
+              border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+  .banks b { flex: none; min-width: 46px; color: var(--ink); }
+  .banks span { font-size: 13.5px; color: var(--muted); }
   .status { min-height: 1.5em; margin-top: 14px; text-align: center; font-size: 14px;
             color: var(--muted); }
-  .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-         gap: 10px 16px; margin-top: 6px; }
-  .cta p { font-size: 14px; color: var(--muted); }
+  .private { display: flex; align-items: center; justify-content: center; gap: 8px;
+             margin-top: 2px; font-size: 14px; color: var(--ink-2); }
+  .private svg { width: 16px; height: 16px; flex: none; color: var(--accent); }
+  .sample { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+            gap: 0 6px; margin-top: 4px; font-size: 14px; color: var(--muted); }
   .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
               margin-top: 24px; }
   .feature { padding: 18px; border-radius: 14px; border: 1px solid var(--line);
@@ -192,6 +201,18 @@
   button.ask { background: var(--violet-soft); border-color: var(--ask-line);
                color: var(--violet); }
   button.ask:hover { background: var(--ask-hover); border-color: var(--violet); }
+  button.link { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--accent);
+                text-decoration: underline; text-underline-offset: 3px; }
+  button.link:hover { background: none; color: var(--ink); }
+
+  /* screen 2: what the file turned out to be, before anything is analysed */
+  #check-h { margin-bottom: 18px; font-size: clamp(24px, 2.6vw, 32px); overflow-wrap: anywhere; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .facts div { padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
+  .facts dt { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+              color: var(--muted); }
+  .facts dd { margin: 4px 0 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+  .lead-in { color: var(--ink-2); }
 
   /* colour theme switch: top right of the page, of the top bar on phones */
   .page-top { display: flex; justify-content: flex-end; margin: -14px 0 12px; }
@@ -324,6 +345,7 @@
                 background: var(--surface); }
   .picks .inc::before, .inc.plain::before { display: none; }
   .narr { font-family: var(--mono); font-size: 12.5px; }
+  .noref { color: var(--muted); font-weight: 500; }
   .empty { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 16px 18px;
            border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: 14px; }
 
@@ -336,10 +358,10 @@
   .lbl { margin-top: 14px; }
   .field { margin-top: 14px; }
   .field label { margin-bottom: 6px; }
-  input[type=text], input[type=search] { width: 100%; min-height: 44px; padding: 10px 12px;
+  input[type=text], input[type=search], input[type=password] { width: 100%; min-height: 44px; padding: 10px 12px;
       border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--ink);
       transition: border-color .15s; }
-  input[type=text]:hover, input[type=search]:hover { border-color: var(--line-hover); }
+  input[type=text]:hover, input[type=search]:hover, input[type=password]:hover { border-color: var(--line-hover); }
   input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   input::placeholder { color: var(--placeholder); }
   .search { position: relative; margin-top: 6px; }
@@ -357,7 +379,7 @@
           margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line);
           font-size: 12.5px; color: var(--muted); }
 
-  #screen-drop > *, #screen-audit > * { animation: rise .28s ease-out both; }
+  #screen-drop > *, #screen-check > *, #screen-audit > * { animation: rise .28s ease-out both; }
   #screen-audit > :nth-child(2) { animation-delay: .03s; }
   #screen-audit > :nth-child(3) { animation-delay: .06s; }
   #screen-audit > :nth-child(4) { animation-delay: .09s; }
@@ -386,6 +408,7 @@
     .metric:first-child { grid-column: 1 / -1; border-top: 0; }
     .metric:nth-child(odd):not(:first-child) { border-left: 1px solid var(--line); }
     .features, .fields { grid-template-columns: minmax(0, 1fr); }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 560px) {
     .kpis { grid-template-columns: minmax(0, 1fr); }
@@ -426,7 +449,6 @@
   <symbol id="i-slash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
-  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3l14 9-14 9V3z"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
   <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
@@ -450,7 +472,6 @@
       <li><span class="dot"><span>3</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>
         <div><b>Claim</b><small>Your complaint pack</small></div></li>
     </ol>
-    <!-- demo-swap:privacy -->
     <section class="privacy" aria-labelledby="privacy-h">
       <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Private by design</h2>
       <ul>
@@ -459,7 +480,6 @@
         <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Nothing doubtful is claimed without your answer.</li>
       </ul>
     </section>
-    <!-- /demo-swap:privacy -->
     <p class="side-foot">Applies RBI/2019-20/67 as code.</p>
   </aside>
 
@@ -475,29 +495,28 @@
 
     <section id="screen-drop" aria-labelledby="drop-h">
       <p class="eyebrow">Failed-payment refund audit</p>
-      <h1 id="drop-h">Find out what your bank owes you.</h1>
-      <p class="lede">When a digital payment fails, RBI requires your bank to reverse it on time,
-        and to pay you compensation for every day it is late.
-        <b>RefundRadar finds late refunds, asks about missing ones, and works out what you're owed.</b></p>
-      <!-- demo-swap:doorway -->
+      <h1 id="drop-h">Find failed payments and refunds in your bank statement.</h1>
+      <p class="lede">Upload the statement you download from your bank. RefundRadar reads every
+        transaction, checks each failed payment against RBI's refund deadlines, and
+        <b>works out the compensation your bank owes you.</b></p>
       <div class="drop" id="drop">
         <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
-        <strong>Drop your bank statement here</strong>
-        <p class="or">or choose a file from this computer</p>
-        <div class="formats"><span class="chip">Generic CSV</span><span class="chip">HDFC .csv</span>
-          <span class="chip">HDFC .xls</span><span class="chip">HDFC .xlsx</span>
-          <span class="chip">HDFC Delimited .txt</span></div>
-        <p class="note">Generic CSV needs the columns Date, Narration, Ref, Debit, Credit, Balance.
-          HDFC reading is synthetically tested, not yet verified against a real HDFC export.</p>
-        <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Choose a file</button>
+        <strong>Drag &amp; drop your bank statement here</strong>
+        <p class="or">or</p>
+        <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Upload bank statement</button>
+        <ul class="banks" aria-label="Statements RefundRadar reads">
+          <li><b>SBI</b><span>Excel (.xlsx, .xls) or CSV, including the password-protected download</span></li>
+          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV or the Delimited .txt &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
+        </ul>
+        <p class="note">Also reads a CSV with the columns Date, Narration, Ref, Debit, Credit, Balance.
+          Other banks and PDF statements aren't supported yet.</p>
       </div>
       <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
-      <div class="cta">
-        <button type="button" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Try with a demo statement</button>
-        <p>See it work on synthetic data before you use your own statement.</p>
-      </div>
-      <!-- /demo-swap:doorway -->
+      <p class="private"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Your statement is read on this device and never leaves it.</p>
+      <p class="sample">Don't have a statement?
+        <button type="button" id="demo-btn" class="link">Try the sample statement</button>
+        <span>(synthetic data)</span></p>
       <div class="features">
         <div class="feature"><span class="fi"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
           <b>Stays on this computer</b><p>No login. No signup. Your statement never leaves this computer.</p></div>
@@ -508,10 +527,43 @@
       </div>
     </section>
 
+    <section id="screen-check" class="hidden" aria-labelledby="check-h">
+      <p class="eyebrow" id="check-eyebrow">Statement detected</p>
+      <h1 id="check-h"></h1>
+      <div class="card hidden" id="unlock-card">
+        <p class="lead-in">Your bank locked this file with a password. Enter it to open the
+          statement here: it is used once, on this device, and never stored.</p>
+        <div class="field"><label for="pw">Statement password</label>
+          <input type="password" id="pw" autocomplete="off" spellcheck="false"></div>
+        <p class="field-error hidden" id="pw-error" role="alert"></p>
+        <p class="hint">Your bank's statement download page shows the password format. It is not
+          your login password.</p>
+        <div class="row">
+          <button type="button" class="primary" id="unlock-btn"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Open statement</button>
+          <button type="button" class="ghost again">Choose a different file</button>
+        </div>
+      </div>
+      <div class="card hidden" id="detected-card">
+        <dl class="facts">
+          <div><dt>Bank</dt><dd id="det-bank"></dd></div>
+          <div><dt>File</dt><dd id="det-type"></dd></div>
+          <div><dt>Transactions</dt><dd id="det-count"></dd></div>
+          <div><dt>Period</dt><dd id="det-period"></dd></div>
+        </dl>
+        <div class="verify" id="det-verify"></div>
+        <p class="hint">Nothing has been analysed yet. The analysis runs on this device.</p>
+        <div class="row">
+          <button type="button" class="primary" id="analyze-btn"><svg class="ic" aria-hidden="true"><use href="#i-radar"/></svg>Analyze statement</button>
+          <button type="button" class="ghost again">Choose a different file</button>
+        </div>
+      </div>
+      <div class="status" id="check-status" role="status" aria-live="polite"></div>
+    </section>
+
     <section id="screen-audit" class="hidden" aria-labelledby="audit-h">
       <div class="page-head">
         <div><p class="eyebrow">Audit results</p><h1 id="audit-h">Your refund audit</h1></div>
-        <!-- demo-swap:new --><button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button><!-- /demo-swap:new -->
+        <button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button>
       </div>
 
       <div class="card" id="statement-card">
@@ -571,7 +623,6 @@
 
       <section class="card" id="confirm-card" aria-labelledby="conf-h">
         <div class="sec-head"><h2 id="conf-h"><span class="h-ic tone-ask"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Did a payment fail that never came back?</h2></div>
-        <!-- demo-swap:confirm -->
         <p class="hint">The statement alone can't prove a failure that was never
           reversed &mdash; a failed payment looks identical to a successful one.
           Search the payment you remember and confirm it.</p>
@@ -579,14 +630,12 @@
         <div class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
           <input type="search" id="search" autocomplete="off" placeholder="Amount, name or date, e.g. 2499"></div>
         <div id="candidates"></div>
-        <!-- /demo-swap:confirm -->
       </section>
 
       <section class="card claim" id="claim-card" aria-labelledby="claim-h">
         <div class="sec-head"><h2 id="claim-h"><span class="h-ic tone-brand"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg></span>Generate the complaint pack</h2></div>
         <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
           citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
-        <!-- demo-swap:fields -->
         <div class="fields">
           <div class="field"><label for="c-name">Name as on the account</label>
             <input type="text" id="c-name" autocomplete="name" placeholder="A. Sample Customer"></div>
@@ -595,7 +644,6 @@
           <div class="field"><label for="c-contact">Email or phone for the reply</label>
             <input type="text" id="c-contact" placeholder="you@example.com"></div>
         </div>
-        <!-- /demo-swap:fields -->
         <p class="field-error hidden" id="pack-error" role="alert"></p>
         <div class="row">
           <button class="primary" id="pack-btn"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg>Generate complaint pack</button>
@@ -620,8 +668,8 @@
 
 <script>
 // The view: how a result looks. The public demo page runs this block unchanged.
-const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
-                fileName: "", packText: "" };
+const state = { csv: null, file: null, confirmed: new Set(), confirmedRows: new Set(),
+                pairs: [], fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
 // statement text (narrations, references, file names) is data, never markup
@@ -648,7 +696,47 @@ function setStage(stage) {
   });
 }
 
-function setStatus(msg) { $("status").textContent = msg; $("st-status").textContent = msg; }
+function setStatus(msg) {
+  for (const id of ["status", "check-status", "st-status"]) $(id).textContent = msg;
+}
+
+// one screen at a time: the doorway, the statement found in the file, the audit
+function showScreen(name) {
+  for (const s of ["drop", "check", "audit"]) $(`screen-${s}`).classList.toggle("hidden", s !== name);
+}
+
+// a statement the bank locked: its password opens it here, once
+function showLocked(fileName, wrong) {
+  showScreen("check");
+  setStage("upload");
+  $("check-eyebrow").textContent = "Password-protected statement";
+  $("check-h").textContent = fileName;
+  $("detected-card").classList.add("hidden");
+  $("unlock-card").classList.remove("hidden");
+  $("pw-error").textContent = wrong ? "That password didn't open it. Check it and try again." : "";
+  $("pw-error").classList.toggle("hidden", !wrong);
+  setStatus(wrong ? "That password didn't open the file." : `${fileName} is password-protected.`);
+  $("pw").focus();
+}
+
+// what the file turned out to be, before anything is analysed
+function showDetected(s, fileName) {
+  showScreen("check");
+  setStage("upload");
+  $("check-eyebrow").textContent = "Statement detected";
+  $("check-h").textContent = fileName;
+  $("unlock-card").classList.add("hidden");
+  $("detected-card").classList.remove("hidden");
+  $("det-bank").textContent = s.bank === "generic" ? "None named (generic CSV)" : s.bank;
+  $("det-type").textContent = s.file_type + (s.unlocked_file ? ", opened with your password" : "");
+  $("det-count").textContent = `${s.transactions} (${s.payments} out, ${s.credits} in)`;
+  $("det-period").textContent = s.first ? `${day(s.first)} – ${day(s.last)}` : "–";
+  $("det-verify").textContent = s.verification;
+  $("det-verify").classList.toggle("caution", s.verification.includes("synthetically"));
+  setStatus(`Found ${s.bank === "generic" ? "a generic CSV" : `an ${s.bank}`} statement ` +
+            `with ${s.transactions} transactions.`);
+  $("analyze-btn").focus({ preventScroll: true });
+}
 
 function showError(msg) {
   const e = $("error"); e.textContent = msg; e.style.display = msg ? "block" : "none";
@@ -715,15 +803,14 @@ function render(data) {
   const a = data.audit, s = data.summary, st = data.statement;
   const fresh = $("screen-audit").classList.contains("hidden");
   state.candidates = data.candidates;
-  $("screen-drop").classList.add("hidden");
-  $("screen-audit").classList.remove("hidden");
+  showScreen("audit");
   if (fresh) window.scrollTo(0, 0);  // answering a question keeps your place
   setStage("review");
   $("pack-card").classList.add("hidden");  // the answers changed: the letter must be made again
   $("st-name").textContent = state.fileName;
   $("st-format").textContent = st.format === "generic" ? "Generic CSV" : `${st.format} export`;
   $("st-verify").textContent = st.verification;
-  $("st-verify").classList.toggle("caution", st.format === "HDFC");
+  $("st-verify").classList.toggle("caution", st.verification.includes("synthetically"));
   $("sum-txns").textContent = s.transactions;
   $("sum-found").textContent = s.refunds_found;
   $("sum-matched").textContent = s.matched;
@@ -757,27 +844,29 @@ function render(data) {
       state.pairs.push([Number(b.dataset.pay), Number(b.dataset.refund)]);
       runAudit();
     }));
-  // the public demo page has no search box: it can't audit again
-  if ($("search")) renderCandidates($("search").value.trim().toLowerCase());
+  renderCandidates($("search").value.trim().toLowerCase());
 }
 
 function renderCandidates(q) {
   const list = (state.candidates || [])
-    .filter((c) => !state.confirmed.has(c.ref))
+    .filter((c) => c.ref === null ? !state.confirmedRows.has(c.row) : !state.confirmed.has(c.ref))
     .filter((c) => !q || c.narration.toLowerCase().includes(q) ||
                    c.amount.includes(q) || c.date.includes(q))
     .slice(0, 8);
   $("candidates").innerHTML = list.map((c) => {
     const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    // no reference printed: its place on the statement tells it from any look-alike
+    const noRef = c.ref === null ? ` &middot; <span class="noref">no reference &middot; transaction ${c.row + 1}</span>` : "";
     return `<div class="inc plain"><div class="main">
-        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}</div>
+        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}${noRef}</div>
         <div class="sub narr">${esc(c.narration)}</div></div>
-        <div class="act"><button data-ref="${esc(c.ref)}" class="mark-failed ask">This payment failed</button></div></div>`;
+        <div class="act"><button ${c.ref === null ? `data-row="${c.row}"` : `data-ref="${esc(c.ref)}"`} class="mark-failed ask">This payment failed</button></div></div>`;
   }).join("") || `<p class="empty">${q ? `No payment matches &ldquo;${esc(q)}&rdquo;.`
                                        : "Type to search your payments."}</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
     b.addEventListener("click", () => {
-      state.confirmed.add(b.dataset.ref);
+      if (b.dataset.row !== undefined) state.confirmedRows.add(Number(b.dataset.row));
+      else state.confirmed.add(b.dataset.ref);
       $("search").value = "";  // that search is done; the payment is now a finding
       runAudit();
     }));
@@ -821,22 +910,30 @@ $("download-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 </script>
-<!-- demo-swap:io -->
+<!-- demo-swap:transport -->
 <script>
-// Reading your file and asking the local server; the public demo page has neither.
-
-// the statement as the server needs it: CSV text, or the file's own bytes
-function payload(extra) {
-  const src = state.file !== null ? { file: state.file, filename: state.fileName }
-                                  : { csv: state.csv };
-  return { ...src, confirmed: [...state.confirmed], pairs: state.pairs, ...extra };
-}
-
-async function api(path, body) {
-  const res = await fetch(path, body === undefined ? {} : {
+// How a request reaches RefundRadar: here, the local server.
+function send(path, body) {
+  return fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+</script>
+<!-- /demo-swap:transport -->
+<script>
+// Reading your file and asking RefundRadar about it.
+
+// the statement as RefundRadar needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], confirmed_rows: [...state.confirmedRows],
+           pairs: state.pairs, ...extra };
+}
+
+async function api(path, body) {
+  const res = await send(path, body);
   if (!res.ok) {
     let detail = "Something went wrong.";
     try { detail = (await res.json()).detail || detail; } catch (_) {}
@@ -855,8 +952,7 @@ async function runAudit() {
     setStatus("Audit complete.");
   } catch (err) {
     // an unreadable statement gets no result at all, only the reason
-    $("screen-audit").classList.add("hidden");
-    $("screen-drop").classList.remove("hidden");
+    showScreen("drop");
     setStage("upload");
     setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
     showError(err.message);
@@ -864,6 +960,40 @@ async function runAudit() {
   } finally {
     document.body.classList.remove("busy");
   }
+}
+
+// Step one: what is this file? Its bank, its transactions, its dates; nothing
+// is analysed until you say so. A locked file comes back open, so its
+// password is used once and never kept.
+async function checkStatement(password) {
+  showError("");
+  setStatus(`Reading ${state.fileName}…`);
+  document.body.classList.add("busy");
+  try {
+    const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                    : { csv: state.csv };
+    const s = await (await api("/api/statement",
+                               password === undefined ? src : { ...src, password })).json();
+    if (s.locked) { showLocked(state.fileName, s.wrong_password); return; }
+    if (s.unlocked_file) state.file = s.unlocked_file;
+    showDetected(s, state.fileName);
+    window.scrollTo(0, 0);
+  } catch (err) {
+    showScreen("drop");
+    setStage("upload");
+    setStatus(`Could not read ${state.fileName}. Nothing was analysed.`);
+    showError(err.message);
+    window.scrollTo(0, 0);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+function unlock() {
+  const pw = $("pw").value;
+  $("pw").value = "";
+  if (!pw) { showLocked(state.fileName, false); return; }
+  checkStatement(pw);
 }
 
 $("search").addEventListener("input", (e) => renderCandidates(e.target.value.trim().toLowerCase()));
@@ -880,10 +1010,10 @@ $("file").addEventListener("change", (e) => { if (e.target.files.length) readFil
 function readFile(f) {
   showError("");
   Object.assign(state, { csv: null, file: null, fileName: f.name,
-                         confirmed: new Set(), pairs: [] });
+                         confirmed: new Set(), confirmedRows: new Set(), pairs: [] });
   setStatus(`Reading ${f.name}…`);
   const reader = new FileReader();
-  reader.onload = () => { state.file = toBase64(reader.result); runAudit(); };
+  reader.onload = () => { state.file = toBase64(reader.result); checkStatement(); };
   reader.onerror = () => { setStatus(`Could not read ${f.name}.`);
                            showError("The browser could not read that file."); };
   reader.readAsArrayBuffer(f);  // .xls and .xlsx are binary: send the bytes as they are
@@ -897,16 +1027,33 @@ function toBase64(buffer) {
   return btoa(bin);
 }
 
+// the sample goes through the same steps as your own file; nothing is answered for you
 $("demo-btn").addEventListener("click", async () => {
   showError("");
   try {
     const data = await (await api("/api/demo")).json();
-    Object.assign(state, { csv: data.csv, file: null, pairs: [],
-                           fileName: "demo_statement.csv (synthetic)",
-                           confirmed: new Set(data.suggested_confirmed) });
-    runAudit();
+    Object.assign(state, { csv: data.csv, file: null, pairs: [], confirmed: new Set(),
+                           confirmedRows: new Set(), fileName: "Sample statement (synthetic)" });
+    checkStatement();
   } catch (err) { showError(err.message); }
 });
+
+$("unlock-btn").addEventListener("click", unlock);
+$("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+$("analyze-btn").addEventListener("click", runAudit);
+
+// back to the doorway, forgetting the statement and every answer about it
+function startOver() {
+  Object.assign(state, { csv: null, file: null, fileName: "", confirmed: new Set(),
+                         confirmedRows: new Set(), pairs: [], packText: "", candidates: [] });
+  $("file").value = ""; $("search").value = ""; $("pw").value = "";
+  $("pack").textContent = "";
+  for (const id of ["pack", "download-btn", "pack-card"]) $(id).classList.add("hidden");
+  showError(""); packError(""); setStatus("");
+  showScreen("drop"); setStage("upload"); window.scrollTo(0, 0);
+}
+document.querySelectorAll(".again").forEach((b) =>
+  b.addEventListener("click", () => { startOver(); $("file").click(); }));
 
 $("pack-btn").addEventListener("click", async () => {
   showError(""); packError("");
@@ -922,9 +1069,8 @@ $("pack-btn").addEventListener("click", async () => {
   finally { document.body.classList.remove("busy"); }
 });
 
-$("reset-btn").addEventListener("click", () => location.reload());
-$("new-btn").addEventListener("click", () => location.reload());
+$("reset-btn").addEventListener("click", startOver);
+$("new-btn").addEventListener("click", startOver);
 </script>
-<!-- /demo-swap:io -->
 </body>
 </html>

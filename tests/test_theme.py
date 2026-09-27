@@ -125,5 +125,5 @@ def test_theme_switch_sits_in_the_top_corner_and_starts_dark():
 
 
 def test_the_live_demo_has_the_same_switch():
-    page = bd.render(*bd.build_demo_data())
+    page = bd.render()
     assert 'data-theme-choice="light"' in page and ':root[data-theme="light"]' in page

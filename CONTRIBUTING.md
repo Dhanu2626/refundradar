@@ -25,9 +25,16 @@ fake references) and test against that. Real data stays on your machine, always.
 4. Check whether the bank ties a reversal to the original payment by reference. Some (SBI)
    issue reversals under a **fresh** reference — if so, the amount+timing fallback in
    [`refundradar/reconcile.py`](refundradar/reconcile.py) is what catches it.
-5. Run `python -m pytest -q` and open a pull request. If you changed the web page or what
-   the engine finds, also run `python tools/build_demo_page.py`: `docs/index.html` is the
-   live demo, built from the app's own page, and a test fails while it is out of date.
+5. Read strictly, as `parse_sbi_rows` and `parse_hdfc_rows` do (DECISIONS.md, D10 and
+   D16): pass over only rows you can account for, stop on any other row and name it, and
+   check the bank's own running balance with `_check_balances`. A row read as blank is a
+   dropped row, and the dropped row could be the refund.
+6. Run `python -m pytest -q` and open a pull request. If you changed the web page or
+   anything in `refundradar/`, also run `python tools/build_demo_page.py`: `docs/` is the
+   live demo (the app's own page and code, run in the browser), and a test fails while it
+   is out of date. The runtime under `docs/pyodide/` and `docs/vendor/` is pinned by
+   SHA-256; `--fetch-runtime` downloads it again (npm, PyPI, and the 340 MB Pyodide
+   release for the `cryptography` build that opens locked files) and checks every digest.
 
 ## Ground rules
 

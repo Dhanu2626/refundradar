@@ -1,199 +1,236 @@
-"""Generate the public demo page (docs/index.html) for GitHub Pages.
+"""Build the public live demo (docs/) for GitHub Pages: the RefundRadar app
+itself, running in the visitor's browser.
 
-The page is the web app's own page (refundradar/static/index.html): the same
-markup, styles and findings renderer, so the live demo looks and reads exactly
-like the app. The app marks the few blocks that must differ with demo-swap
-comments, and they are replaced here by versions that take no file. The page
-has no file input, no form and no network call: the one audit it can show is
-the app's own answer for the synthetic demo statement, frozen at build time,
-so the "your statement never leaves your computer" promise cannot be violated
-here.
+docs/index.html is the app's own page (refundradar/static/index.html) with the
+blocks it marks demo-swap replaced: its title, its footer line, and send(),
+which there hands each request to the app's own routes (refundradar/webapp.py)
+running under Pyodide instead of on a server. docs/engine.zip carries the app's
+Python code and data, plus the stand-ins in tools/demo_engine/ that let
+webapp.py import without FastAPI or pydantic. Pyodide and the pure-Python
+packages the parser reads spreadsheets with are vendored under docs/, pinned by
+SHA-256 below, so the page loads nothing from any other site; its
+Content-Security-Policy lets it connect only to its own. A statement chosen on
+the demo is read in the page and sent nowhere. Pyodide's own build of
+cryptography, which opens a password-protected Excel file (SBI's download), is
+vendored too and fetched only when a password is typed.
 
-Re-run after any engine or web app change:  python tools/build_demo_page.py
-(tests/test_demo_page.py fails while docs/index.html is out of date).
+Rebuild after any change to the app page or the Python package:
+    python tools/build_demo_page.py
+Download the pinned runtime again (from npm and PyPI, checking every digest):
+    python tools/build_demo_page.py --fetch-runtime
+tests/test_demo_page.py fails while docs/ is out of date.
 """
 
-import html
-import json
+import hashlib
+import io
 import re
 import sys
-from datetime import date
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from refundradar.webapp import (INDEX, AuditRequest, ComplaintRequest, audit_endpoint,
-                                complaint_endpoint, demo)
+from refundradar.webapp import INDEX
 
 DOCS = ROOT / "docs"
-AS_OF = date(2026, 7, 24)  # frozen so the demo numbers are stable
-SAMPLE = {"name": "A. Sample Customer", "account_last4": "2626",
-          "contact": "sample@example.com"}
-FILE_NAME = "demo_statement.csv (synthetic)"  # what the app calls its demo statement
-
+ENGINE_SOURCE = ROOT / "tools" / "demo_engine"
 REPO_URL = "https://github.com/Dhanu2626/refundradar"
-RUN_IT = REPO_URL + "#how-it-works"
+
+PYODIDE = "314.0.7"  # Python 3.14, the line CI tests on
+PYODIDE_TARBALL = ("https://registry.npmjs.org/pyodide/-/pyodide-314.0.7.tgz",
+                   "d18bd7c4485f11da4b7dbfd790cd8114078c44eab488c517d9bcf31fda4eb6dc"
+                   "8c716930abe1db139bb2b860fcd8b37bcb6abe48dbe2ffa579244b0e943d91d4")
+# the pure-Python packages the parser opens spreadsheets with (formats.py) and
+# PyYAML for the rulebook, unpacked beside the app's code in this order
+PACKAGES = {
+    "vendor/xlrd-2.0.2-py2.py3-none-any.whl": "xlrd",
+    "vendor/openpyxl-3.1.5-py2.py3-none-any.whl": "openpyxl",
+    "vendor/et_xmlfile-2.0.0-py3-none-any.whl": "et-xmlfile",
+    "vendor/olefile-0.47-py2.py3-none-any.whl": "olefile",
+    "vendor/pyyaml-6.0.3-pure.zip": "pyyaml",  # its pure-Python half, from the source release
+    "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl": "msoffcrypto-tool",  # opens locked files
+}
+# Pyodide's builds of what msoffcrypto-tool decrypts with, loaded with
+# pyodide.loadPackage("cryptography") the first time a password is typed.
+# They come from the Pyodide release and must match pyodide-lock.json, which
+# is itself pinned below.
+PYODIDE_RELEASE = (f"https://github.com/pyodide/pyodide/releases/download/{PYODIDE}/"
+                   f"pyodide-{PYODIDE}.tar.bz2")
+UNLOCK = ("cryptography", "cffi", "pycparser", "six")
+# every vendored file, by SHA-256
+RUNTIME = {
+    "pyodide/pyodide.js":
+        "3141b814715a72e59b51b1b18b9ceae5bf19f7c852417e431bb0a34feadf825c",
+    "pyodide/pyodide.asm.mjs":
+        "f7cdc8ece80678ceb712f8e65ebe6d3a83203a180c399865f49612a051693635",
+    "pyodide/pyodide.asm.wasm":
+        "cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6",
+    "pyodide/python_stdlib.zip":
+        "fa1957e5777068fc4f7437f96d860ae2fbe9c19732ba06c84e004ec16dd7dd7a",
+    "pyodide/pyodide-lock.json":
+        "5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010",
+    "pyodide/LICENSE":
+        "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+    "vendor/xlrd-2.0.2-py2.py3-none-any.whl":
+        "ea762c3d29f4cca48d82df517b6d89fbce4db3107f9d78713e48cd321d5c9aa9",
+    "vendor/openpyxl-3.1.5-py2.py3-none-any.whl":
+        "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2",
+    "vendor/et_xmlfile-2.0.0-py3-none-any.whl":
+        "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+    "vendor/olefile-0.47-py2.py3-none-any.whl":
+        "543c7da2a7adadf21214938bb79c83ea12b473a4b6ee4ad4bf854e7715e13d1f",
+    "vendor/pyyaml-6.0.3-pure.zip":
+        "5f5537e1ebd467c6ddb961466196798021ef56a94df7eb6c09e45edba68cb39d",
+    "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl":
+        "46c394ed5d9641e802fc79bf3fb0666a53748b23fa8c4aa634ae9d30d46fe397",
+    "pyodide/cryptography-47.0.0-cp314-abi3-pyemscripten_2026_0_wasm32.whl":
+        "0b41491ced2cf85046559cac2502e875492cbef6d332addafa680e41be27f0ad",
+    "pyodide/cffi-2.0.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl":
+        "9ae1a61096321cef7248e02293f42d000fa87b73a3e795705a2444290590459d",
+    "pyodide/pycparser-3.0-py3-none-any.whl":
+        "0b4cbc12c42e25df55343342fb0da45b189181e4f360602f9721db2016fc3a4b",
+    "pyodide/six-1.17.0-py2.py3-none-any.whl":
+        "228c50f73aa7addf2c2ccf2979c256802a59ab69cad8152b31b9443cc8140f42",
+}
 
 SWAP = re.compile(r"<!-- demo-swap:(\w+) -->.*?<!-- /demo-swap:\1 -->", re.S)
-# what would let the page take a file or reach the network
-UPLOAD_SURFACE = ("<input", "<form", "fetch(", "xmlhttprequest", "websocket", "sendbeacon",
-                  "filereader", "<script src", "<iframe")
+# The page may fetch only from its own site (the engine files) and may never
+# submit a form; the browser enforces both, whatever a script tries.
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
+       "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
+       "object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'")
 
+TITLE = f"""<title>RefundRadar — the payments auditor your bank hopes you never run</title>
+<meta name="description" content="RefundRadar in your browser: upload an SBI or HDFC statement to find failed payments, late refunds and the compensation your bank owes. Nothing is uploaded.">
+<meta http-equiv="Content-Security-Policy" content="{CSP}">"""
 
-def build_demo_data():
-    """The app's answers for its own demo statement, as of AS_OF: the audit
-    response and the complaint pack for a sample customer."""
-    d = demo()
-    req = {"csv": d["csv"], "confirmed": d["suggested_confirmed"], "as_of": AS_OF.isoformat()}
-    data = audit_endpoint(AuditRequest(**req))
-    pack = complaint_endpoint(ComplaintRequest(**req, **SAMPLE))
-    # The page can't audit again, so it must never ask a question.
-    if data["unmatched"] or any(i["action"] != "none" for i in data["audit"]["incidents"]):
-        raise SystemExit("The demo statement now asks a question the static page can't "
-                         "answer. Change the demo statement, or give the page a way to answer.")
-    # It shows channel names, never codes, and has no search box: it carries
-    # neither the codes nor the statement's list of payments.
-    for i in data["audit"]["incidents"]:
-        if not i["channel_name"]:
-            raise SystemExit(f"No channel name for {i['ref']}: the demo would show a code.")
-        del i["channel"]
-    data["candidates"] = []
-    return data, pack
+FOOTER = ("<span>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs entirely in "
+          "your browser.</span>")
 
+TRANSPORT = """<script src="pyodide/pyodide.js"></script>
+<script>
+// Every request is answered in this browser: RefundRadar's own routes
+// (refundradar/webapp.py) run under Pyodide, loaded from this site, so a
+// statement chosen here is read in this page and sent nowhere.
+const ENGINE_FILES = [@FILES@];
+let engineReady = false;
+const runtime = loadPyodide({ indexURL: "pyodide/" });
+const engine = (async () => {
+  const py = await runtime;
+  for (const f of ENGINE_FILES)
+    py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
+  py.runPython("import sys; sys.path.insert(0, '/engine')");
+  return py.pyimport("bridge");
+})();
+engine.then(() => { engineReady = true; engineState("ready", "ready"); },
+            () => engineState("failed", "couldn't start in this browser"));
 
-def rupees(n) -> str:
-    """Whole rupees in Indian digit grouping, as the app shows them (₹1,00,000)."""
-    digits = str(int(n))
-    head, groups = digits[:-3], [digits[-3:]]
-    while len(head) > 2:
-        head, groups = head[:-2], [head[-2:]] + groups
-    return "₹" + ",".join(([head] if head else []) + groups)
+// Opening a password-protected file takes Pyodide's build of cryptography,
+// from this site, checked against pyodide-lock.json: fetched the first time a
+// password is typed, so nobody else downloads it.
+let unlocker = null;
+const canUnlock = () => unlocker ??= runtime.then((py) => py.loadPackage("cryptography"));
 
+function engineState(state, words) {
+  const el = $("engine-state");
+  el.dataset.state = state;
+  el.textContent = words;
+}
 
-def icon(name: str) -> str:
-    return f'<svg class="ic" aria-hidden="true"><use href="#i-{name}"/></svg>'
-
-
-def demo_parts(data: dict, pack: str, confirmed: list) -> dict:
-    """The page's own version of each block the app marks with demo-swap."""
-    a = data["audit"]
-    as_of = date.fromisoformat(a["as_of"]).strftime("%d %b %Y")
-    shown = any(i["ref"] in confirmed for i in a["incidents"])
-    blob = json.dumps({"file_name": FILE_NAME, "response": data, "pack": pack,
-                       "confirmed": confirmed}, ensure_ascii=False)
-    sample = {k: html.escape(v) for k, v in SAMPLE.items()}
-    return {
-        "title": """<title>RefundRadar — the payments auditor your bank hopes you never run</title>
-<meta name="description" content="RBI requires your bank to pay you Rs.100/day for late refunds on failed payments, automatically. Almost nobody checks. RefundRadar does.">""",
-        "privacy": f"""<section class="privacy" aria-labelledby="privacy-h">
-      <h2 id="privacy-h">{icon("shield")}Live demo</h2>
-      <ul>
-        <li>{icon("check")}A synthetic statement. No real account.</li>
-        <li>{icon("check")}This page can't take a file, and sends nothing anywhere.</li>
-        <li>{icon("check")}The app itself runs on your own computer.</li>
-      </ul>
-    </section>""",
-        "doorway": f"""<div class="drop demo">
-        <div class="up">{icon("play")}</div>
-        <strong>Run a real audit on a sample statement</strong>
-        <p class="or">It finds the {rupees(a["total_owed_inr"])} a bank owes this made-up customer, and shows its work.</p>
-        <div class="formats"><span class="chip">Synthetic data</span>
-          <span class="chip">{a["statement_lines"]} transactions</span><span class="chip">As of {as_of}</span></div>
-        <p class="note">This page can't take a file: it has no upload, and nothing you do here
-          leaves your browser. To audit your own statement,
-          <a href="{RUN_IT}">run RefundRadar on your computer</a>.</p>
-        <button type="button" class="primary choose" id="demo-btn">{icon("play")}Run the demo audit</button>
-      </div>
-      <noscript><p class="error" style="display:block">This demo needs JavaScript to show the audit.</p></noscript>
-      <div class="status" id="status" role="status" aria-live="polite"></div>""",
-        "new": f'<a class="button ghost" href="{RUN_IT}">Audit your own statement</a>',
-        "confirm": """<p class="hint">The statement alone can't prove a failure that was never
-          reversed &mdash; a failed payment looks identical to a successful one.
-          In the app, you search the payment you remember and confirm it.</p>"""
-        + ("""
-        <p class="verify">This demo confirmed one for you: <b id="demo-confirmed"></b>.
-          It is the &ldquo;Still missing&rdquo; finding above.</p>""" if shown else ""),
-        "fields": f"""<div class="fields">
-          <div class="field"><span class="ro-label">Name as on the account</span><div class="ro">{sample["name"]}</div></div>
-          <div class="field"><span class="ro-label">Account last 4 digits</span><div class="ro">{sample["account_last4"]}</div></div>
-          <div class="field"><span class="ro-label">Email or phone for the reply</span><div class="ro">{sample["contact"]}</div></div>
-        </div>
-        <p class="hint">The demo fills these in for a sample customer. In the app, you type
-          your own, and they go only into the letter.</p>""",
-        "footer": "<span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This demo reads a "
-                  "synthetic statement; the app runs 100% on your computer.</span>",
-        # "<" escaped: the statement's text can never close the script element
-        "io": ('<script type="application/json" id="demo-data">'
-               + blob.replace("<", "\\u003c") + "</script>\n" + DEMO_SCRIPT),
+async function send(path, body) {
+  if (!engineReady) {
+    setStatus("Starting RefundRadar in your browser…");
+    document.body.classList.add("busy");
+  }
+  let bridge;
+  try {
+    bridge = await engine;
+  } catch (_) {
+    document.body.classList.remove("busy");
+    throw new Error("RefundRadar couldn't start in this browser. " +
+                    "Run it on your computer instead: it works the same.");
+  }
+  if (body !== undefined && body.password) {
+    try {
+      await canUnlock();
+    } catch (_) {
+      unlocker = null;
+      throw new Error("The part that opens password-protected files couldn't load. Try " +
+                      "again, or save the file unprotected from Excel and choose that copy.");
     }
-
-
-DEMO_SCRIPT = """<script>
-// The public demo, built by tools/build_demo_page.py: what the app answers for its
-// demo statement, frozen into this page. It has no file input, no form and no
-// network call, so it can never receive a statement.
-const DEMO = JSON.parse($("demo-data").textContent);
-
-$("demo-btn").addEventListener("click", () => {
-  showError("");
-  state.fileName = DEMO.file_name;
-  render(DEMO.response);
-  const note = $("demo-confirmed");
-  if (note) note.textContent = DEMO.response.audit.incidents
-    .filter((i) => DEMO.confirmed.includes(i.ref))
-    .map((i) => `${i.channel_name} · ${inr(i.amount)} · ${day(i.date)}`).join("; ");
-  setStatus("Audit complete.");
-});
-
-$("pack-btn").addEventListener("click", () => { showError(""); showPack(DEMO.pack); });
-$("reset-btn").addEventListener("click", () => location.reload());
-
-// a file dropped here is never read: say so, rather than let the browser open it
-document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => {
-  e.preventDefault();
-  showError("This live demo can't take a file, and it didn't read that one. " +
-            "To audit your own statement, run RefundRadar on your computer.");
-  window.scrollTo(0, 0);
-});
+  }
+  await new Promise((r) => setTimeout(r, 16));  // let "Auditing…" show before the engine works
+  const out = bridge.call(body === undefined ? "GET" : "POST", path,
+                          body === undefined ? "" : JSON.stringify(body));
+  const [status, type, text] = out.toJs();
+  out.destroy();
+  return new Response(text, { status, headers: { "Content-Type": type } });
+}
 </script>"""
 
-BANNER = f"""<div class="demo-bar"><span class="pill">Live demo</span><span>Synthetic statement &middot;
-  this page can't take a file &middot; <a href="{REPO_URL}">Get RefundRadar on GitHub</a></span></div>
+BANNER = f"""<div class="demo-bar"><span><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg> RefundRadar
+  runs entirely in this browser: your statement is read on this device and never uploaded
+  &middot; <span id="engine-state" data-state="loading">starting…</span> &middot;
+  <a href="{REPO_URL}">Source on GitHub</a></span></div>
 """
 
 DEMO_CSS = """
-  /* the public demo's few rules of its own; everything else is the app's */
+  /* the live demo's few rules of its own; everything else is the app's */
   :root { --demo-bar: #0d1b1b; }
   :root[data-theme="light"] { --demo-bar: #e2f5f1; }
   .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
               gap: 4px 10px; min-height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--line);
               background: var(--demo-bar); color: var(--ink-2); font-size: 13px; text-align: center; }
-  .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
-                    color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
-                    letter-spacing: .06em; text-transform: uppercase; }
-  .demo-bar a, .drop.demo a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .demo-bar svg { width: 15px; height: 15px; vertical-align: -2px; color: var(--accent); }
+  .demo-bar a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  #engine-state[data-state="ready"] { color: var(--accent); font-weight: 600; }
+  #engine-state[data-state="failed"] { color: var(--coral-ink); font-weight: 600; }
   .shell { min-height: calc(100vh - 40px); }
   @media (min-width: 1024px) { .side { height: calc(100vh - 40px); } }
-  .drop.demo, .drop.demo:hover { cursor: default; border-style: solid;
-                                 border-color: var(--teal-line); }
-  a.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-             min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
-             color: var(--ink); font-size: 14.5px; font-weight: 600; text-decoration: none;
-             transition: background-color .15s, border-color .15s; }
-  a.button:hover { background: var(--surface-2); border-color: var(--line-hover); }
-  .ro-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600;
-              color: var(--ink-2); }
-  .ro { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-2);
-        background: var(--bg); color: var(--ink-2); overflow-wrap: anywhere; }
 """
 
 
-def render(data: dict, pack: str) -> str:
-    """The app's page with its demo-swap blocks replaced: the public demo."""
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _zip(files: dict[str, bytes]) -> bytes:
+    """A zip that is the same bytes on any machine: sorted, stored, dated 1980."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for name in sorted(files):
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.external_attr = 0o644 << 16
+            z.writestr(info, files[name])
+    return buf.getvalue()
+
+
+def _text(path: Path) -> bytes:
+    # line endings as git stores them, whatever the checkout turned them into
+    return path.read_text(encoding="utf-8").encode("utf-8")
+
+
+def engine_files() -> dict[str, bytes]:
+    """What the demo runs: the app's package and data, the bridge, the stand-ins."""
+    files = {f"refundradar/{p.name}": _text(p) for p in (ROOT / "refundradar").glob("*.py")}
+    files["rules/rbi_tat.yaml"] = _text(ROOT / "rules" / "rbi_tat.yaml")
+    for name in ("demo_statement.csv", "ground_truth.json"):
+        files[f"samples/{name}"] = _text(ROOT / "samples" / name)
+    for p in ENGINE_SOURCE.rglob("*.py"):
+        files[p.relative_to(ENGINE_SOURCE).as_posix()] = _text(p)
+    return files
+
+
+def build_engine() -> bytes:
+    return _zip(engine_files())
+
+
+def render() -> str:
+    """The app's page with its demo-swap blocks replaced: the live demo."""
     page = INDEX.read_text(encoding="utf-8")
-    parts = demo_parts(data, pack, demo()["suggested_confirmed"])
+    files = ", ".join(f'"{p}"' for p in [*PACKAGES, "engine.zip"])
+    parts = {"title": TITLE, "footer": FOOTER, "transport": TRANSPORT.replace("@FILES@", files)}
     marked = SWAP.findall(page)
     if sorted(marked) != sorted(parts):
         raise SystemExit(f"{INDEX.name} marks the demo-swap blocks {sorted(marked)}; "
@@ -204,19 +241,81 @@ def render(data: dict, pack: str) -> str:
         if page.count(anchor) != 1:
             raise SystemExit(f"{INDEX.name} no longer has exactly one {anchor!r}.")
         page = page.replace(anchor, added)
-    found = [s for s in UPLOAD_SURFACE if s in page.lower()]
-    if found:
-        raise SystemExit(f"The demo page would contain {found}: it must not take a file.")
     return page
 
 
-def main():
-    DOCS.mkdir(exist_ok=True)
-    data, pack = build_demo_data()
-    (DOCS / "index.html").write_text(render(data, pack), encoding="utf-8", newline="\n")
+def check_runtime() -> None:
+    """Every vendored file present, byte for byte the pinned one."""
+    wrong = [p for p, digest in RUNTIME.items()
+             if not (DOCS / p).is_file() or _sha256((DOCS / p).read_bytes()) != digest]
+    if wrong:
+        raise SystemExit(f"Vendored runtime missing or changed: {wrong}. "
+                         "Run python tools/build_demo_page.py --fetch-runtime")
+
+
+def fetch_runtime() -> None:
+    """Download the pinned runtime into docs/, checking every digest on the way."""
+    import json
+    import tarfile
+    from urllib.request import urlopen
+
+    def get(url, sha256=None):
+        data = urlopen(url, timeout=120).read()
+        if sha256 and _sha256(data) != sha256:
+            raise SystemExit(f"{url} does not match its published digest")
+        return data
+
+    tarball = urlopen(PYODIDE_TARBALL[0], timeout=300).read()
+    if hashlib.sha512(tarball).hexdigest() != PYODIDE_TARBALL[1]:
+        raise SystemExit("The Pyodide tarball does not match its npm integrity digest")
+    (DOCS / "pyodide").mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(tarball)) as t:
+        for p in RUNTIME:
+            if p.startswith("pyodide/") and p != "pyodide/LICENSE":
+                (DOCS / p).write_bytes(t.extractfile("package/" + p.split("/", 1)[1]).read())
+    (DOCS / "pyodide/LICENSE").write_bytes(
+        get("https://raw.githubusercontent.com/pyodide/pyodide/main/LICENSE"))
+    lock = json.loads((DOCS / "pyodide/pyodide-lock.json").read_bytes())["packages"]
+    wanted = {lock[n]["file_name"]: lock[n]["sha256"] for n in UNLOCK}
+    with urlopen(PYODIDE_RELEASE, timeout=1800) as r, tarfile.open(fileobj=r, mode="r|bz2") as t:
+        for m in t:  # 340 MB, streamed: only the four wheels are kept
+            name = m.name.rsplit("/", 1)[-1]
+            if name in wanted:
+                data = t.extractfile(m).read()
+                if _sha256(data) != wanted.pop(name):
+                    raise SystemExit(f"{name} does not match pyodide-lock.json")
+                (DOCS / "pyodide" / name).write_bytes(data)
+                if not wanted:
+                    break
+    if wanted:
+        raise SystemExit(f"Not in the Pyodide release: {sorted(wanted)}")
+    (DOCS / "vendor").mkdir(exist_ok=True)
+    for p, project in PACKAGES.items():
+        version = re.search(r"-(\d[\d.]*)-", p).group(1)
+        meta = json.load(urlopen(f"https://pypi.org/pypi/{project}/{version}/json", timeout=60))
+        if project != "pyyaml":
+            [u] = [u for u in meta["urls"] if u["filename"] == p.split("/")[1]]
+            (DOCS / p).write_bytes(get(u["url"], u["digests"]["sha256"]))
+            continue
+        [u] = [u for u in meta["urls"] if u["packagetype"] == "sdist"]
+        with tarfile.open(fileobj=io.BytesIO(get(u["url"], u["digests"]["sha256"]))) as t:
+            top = f"pyyaml-{version}/"
+            files = {m.name[len(top) + 4:]: t.extractfile(m).read() for m in t.getmembers()
+                     if m.name.startswith(top + "lib/yaml/") and m.name.endswith(".py")}
+            files["yaml/LICENSE"] = t.extractfile(top + "LICENSE").read()
+        (DOCS / p).write_bytes(_zip(files))
+    check_runtime()
+
+
+def main(argv=None) -> None:
+    if "--fetch-runtime" in (sys.argv[1:] if argv is None else argv):
+        fetch_runtime()
+    check_runtime()
+    (DOCS / "index.html").write_text(render(), encoding="utf-8", newline="\n")
+    (DOCS / "engine.zip").write_bytes(build_engine())
     (DOCS / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"Wrote {DOCS / 'index.html'}: the app's page, showing "
-          f"{rupees(data['audit']['total_owed_inr'])} owed as of {AS_OF}")
+    print(f"Wrote {DOCS / 'index.html'} and {DOCS / 'engine.zip'}: the app, running in the "
+          f"browser on Pyodide {PYODIDE}")
 
 
 if __name__ == "__main__":

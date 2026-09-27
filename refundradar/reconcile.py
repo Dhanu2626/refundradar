@@ -7,7 +7,8 @@ What a statement alone can prove:
     user's yes/no (DECISIONS.md, D11)
 A debit that never came back looks identical to a successful payment, so
 never-refunded failures require user confirmation (DECISIONS.md, D6) —
-passed in as confirmed_failed_refs.
+passed in as confirmed_failed_refs, or, for a payment the statement prints
+without any reference, as the transaction itself (D14).
 
 Matching passes (DECISIONS.md, D12): (1) a reference printed on both rows,
 which proves the link only if no other payment carries that reference;
@@ -79,6 +80,11 @@ def _ref_keys(t: Transaction) -> set[str]:
     return {r for r in (t.ref, t.alt_ref) if r}
 
 
+def has_reference(t: Transaction) -> bool:
+    """Whether the statement prints any reference for this row."""
+    return bool(_ref_keys(t))
+
+
 def _supported(t: Transaction) -> bool:
     return t.channel is not None and t.channel not in UNSUPPORTED_CHANNELS
 
@@ -120,21 +126,26 @@ def reconcile(
     confirmed_failed_refs: set[str] | None = None,
     as_of: date | None = None,
     confirmed_refunds: list[tuple[Transaction, Transaction]] | None = None,
+    confirmed_failed_txns: list[Transaction] | None = None,
 ) -> list[Incident]:
     confirmed = confirmed_failed_refs or set()
     debits = [t for t in transactions if t.is_debit]
     credits = [t for t in transactions if not t.is_debit]
     used: set[int] = set()
+    rows = {id(t) for t in transactions}
+    # A payment printed without any reference has nothing to confirm it by
+    # but its own row; one that has a reference is confirmed by that (D14).
+    confirmed_rows = {id(t) for t in confirmed_failed_txns or ()
+                      if id(t) in rows and t.is_debit and not has_reference(t)}
     # A reference carried by more than one payment can't say which of them a
     # reversal belongs to: it links rows but proves nothing (D12).
     holders = Counter(k for d in debits for k in _ref_keys(d))
-    is_confirmed = lambda d: bool(_ref_keys(d) & confirmed)
+    is_confirmed = lambda d: bool(_ref_keys(d) & confirmed) or id(d) in confirmed_rows
     shared = lambda d: any(holders[k] > 1 for k in _ref_keys(d))
 
     # A refund the user matched to a payment by hand: their choice is the
     # evidence, and the claim stops at that credit's date (DECISIONS.md, D13).
     chosen: dict[int, Transaction] = {}
-    rows = {id(t) for t in transactions}
     for d, c in confirmed_refunds or ():
         if (id(d) in rows and id(c) in rows and d.is_debit and not c.is_debit
                 and d.amount == c.amount and c.txn_date >= d.txn_date

@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0b0d">
-<!-- The public demo page (docs/index.html) is built from this file by
-     tools/build_demo_page.py: it keeps everything here except the blocks between
-     demo-swap markers, which it replaces with versions that take no file. -->
+<!-- The public live demo (docs/index.html) is this page, built by
+     tools/build_demo_page.py. It keeps everything here except the blocks between
+     demo-swap markers: its title, its footer line, and send(), which there hands
+     each request to the app's own routes running in the visitor's browser. -->
 <title>RefundRadar — the payments auditor your bank hopes you never run</title>
-<meta name="description" content="RBI requires your bank to pay you Rs.100/day for late refunds on failed payments, automatically. Almost nobody checks. RefundRadar does.">
+<meta name="description" content="RefundRadar in your browser: upload an SBI or HDFC statement to find failed payments, late refunds and the compensation your bank owes. Nothing is uploaded.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
 <script>
@@ -165,12 +167,20 @@
           background: var(--slate-soft); color: var(--slate); font-size: 12.5px; font-weight: 600;
           white-space: nowrap; }
   .drop .note { max-width: 540px; margin: 12px auto 0; font-size: 13px; color: var(--muted); }
-  .drop .choose { margin-top: 18px; }
+  .drop .choose { margin-top: 12px; }
+  .banks { display: grid; gap: 8px; max-width: 580px; margin: 22px auto 0; padding: 0;
+           list-style: none; text-align: left; }
+  .banks li { display: flex; align-items: baseline; gap: 12px; padding: 10px 14px;
+              border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+  .banks b { flex: none; min-width: 46px; color: var(--ink); }
+  .banks span { font-size: 13.5px; color: var(--muted); }
   .status { min-height: 1.5em; margin-top: 14px; text-align: center; font-size: 14px;
             color: var(--muted); }
-  .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-         gap: 10px 16px; margin-top: 6px; }
-  .cta p { font-size: 14px; color: var(--muted); }
+  .private { display: flex; align-items: center; justify-content: center; gap: 8px;
+             margin-top: 2px; font-size: 14px; color: var(--ink-2); }
+  .private svg { width: 16px; height: 16px; flex: none; color: var(--accent); }
+  .sample { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+            gap: 0 6px; margin-top: 4px; font-size: 14px; color: var(--muted); }
   .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
               margin-top: 24px; }
   .feature { padding: 18px; border-radius: 14px; border: 1px solid var(--line);
@@ -193,6 +203,18 @@
   button.ask { background: var(--violet-soft); border-color: var(--ask-line);
                color: var(--violet); }
   button.ask:hover { background: var(--ask-hover); border-color: var(--violet); }
+  button.link { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--accent);
+                text-decoration: underline; text-underline-offset: 3px; }
+  button.link:hover { background: none; color: var(--ink); }
+
+  /* screen 2: what the file turned out to be, before anything is analysed */
+  #check-h { margin-bottom: 18px; font-size: clamp(24px, 2.6vw, 32px); overflow-wrap: anywhere; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .facts div { padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
+  .facts dt { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+              color: var(--muted); }
+  .facts dd { margin: 4px 0 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+  .lead-in { color: var(--ink-2); }
 
   /* colour theme switch: top right of the page, of the top bar on phones */
   .page-top { display: flex; justify-content: flex-end; margin: -14px 0 12px; }
@@ -325,6 +347,7 @@
                 background: var(--surface); }
   .picks .inc::before, .inc.plain::before { display: none; }
   .narr { font-family: var(--mono); font-size: 12.5px; }
+  .noref { color: var(--muted); font-weight: 500; }
   .empty { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 16px 18px;
            border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: 14px; }
 
@@ -337,10 +360,10 @@
   .lbl { margin-top: 14px; }
   .field { margin-top: 14px; }
   .field label { margin-bottom: 6px; }
-  input[type=text], input[type=search] { width: 100%; min-height: 44px; padding: 10px 12px;
+  input[type=text], input[type=search], input[type=password] { width: 100%; min-height: 44px; padding: 10px 12px;
       border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--ink);
       transition: border-color .15s; }
-  input[type=text]:hover, input[type=search]:hover { border-color: var(--line-hover); }
+  input[type=text]:hover, input[type=search]:hover, input[type=password]:hover { border-color: var(--line-hover); }
   input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   input::placeholder { color: var(--placeholder); }
   .search { position: relative; margin-top: 6px; }
@@ -358,7 +381,7 @@
           margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line);
           font-size: 12.5px; color: var(--muted); }
 
-  #screen-drop > *, #screen-audit > * { animation: rise .28s ease-out both; }
+  #screen-drop > *, #screen-check > *, #screen-audit > * { animation: rise .28s ease-out both; }
   #screen-audit > :nth-child(2) { animation-delay: .03s; }
   #screen-audit > :nth-child(3) { animation-delay: .06s; }
   #screen-audit > :nth-child(4) { animation-delay: .09s; }
@@ -387,6 +410,7 @@
     .metric:first-child { grid-column: 1 / -1; border-top: 0; }
     .metric:nth-child(odd):not(:first-child) { border-left: 1px solid var(--line); }
     .features, .fields { grid-template-columns: minmax(0, 1fr); }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 560px) {
     .kpis { grid-template-columns: minmax(0, 1fr); }
@@ -411,29 +435,18 @@
   }
 </style>
 <style>
-  /* the public demo's few rules of its own; everything else is the app's */
+  /* the live demo's few rules of its own; everything else is the app's */
   :root { --demo-bar: #0d1b1b; }
   :root[data-theme="light"] { --demo-bar: #e2f5f1; }
   .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
               gap: 4px 10px; min-height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--line);
               background: var(--demo-bar); color: var(--ink-2); font-size: 13px; text-align: center; }
-  .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
-                    color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
-                    letter-spacing: .06em; text-transform: uppercase; }
-  .demo-bar a, .drop.demo a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .demo-bar svg { width: 15px; height: 15px; vertical-align: -2px; color: var(--accent); }
+  .demo-bar a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  #engine-state[data-state="ready"] { color: var(--accent); font-weight: 600; }
+  #engine-state[data-state="failed"] { color: var(--coral-ink); font-weight: 600; }
   .shell { min-height: calc(100vh - 40px); }
   @media (min-width: 1024px) { .side { height: calc(100vh - 40px); } }
-  .drop.demo, .drop.demo:hover { cursor: default; border-style: solid;
-                                 border-color: var(--teal-line); }
-  a.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-             min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
-             color: var(--ink); font-size: 14.5px; font-weight: 600; text-decoration: none;
-             transition: background-color .15s, border-color .15s; }
-  a.button:hover { background: var(--surface-2); border-color: var(--line-hover); }
-  .ro-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600;
-              color: var(--ink-2); }
-  .ro { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-2);
-        background: var(--bg); color: var(--ink-2); overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -452,7 +465,6 @@
   <symbol id="i-slash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
-  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3l14 9-14 9V3z"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
   <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
@@ -462,8 +474,10 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
 </svg>
 
-<div class="demo-bar"><span class="pill">Live demo</span><span>Synthetic statement &middot;
-  this page can't take a file &middot; <a href="https://github.com/Dhanu2626/refundradar">Get RefundRadar on GitHub</a></span></div>
+<div class="demo-bar"><span><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg> RefundRadar
+  runs entirely in this browser: your statement is read on this device and never uploaded
+  &middot; <span id="engine-state" data-state="loading">starting…</span> &middot;
+  <a href="https://github.com/Dhanu2626/refundradar">Source on GitHub</a></span></div>
 <div class="shell">
   <aside class="side" aria-label="RefundRadar">
     <div class="brand">
@@ -479,11 +493,11 @@
         <div><b>Claim</b><small>Your complaint pack</small></div></li>
     </ol>
     <section class="privacy" aria-labelledby="privacy-h">
-      <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Live demo</h2>
+      <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Private by design</h2>
       <ul>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>A synthetic statement. No real account.</li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>This page can't take a file, and sends nothing anywhere.</li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>The app itself runs on your own computer.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>No login. No signup.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Your statement never leaves this computer.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Nothing doubtful is claimed without your answer.</li>
       </ul>
     </section>
     <p class="side-foot">Applies RBI/2019-20/67 as code.</p>
@@ -501,23 +515,28 @@
 
     <section id="screen-drop" aria-labelledby="drop-h">
       <p class="eyebrow">Failed-payment refund audit</p>
-      <h1 id="drop-h">Find out what your bank owes you.</h1>
-      <p class="lede">When a digital payment fails, RBI requires your bank to reverse it on time,
-        and to pay you compensation for every day it is late.
-        <b>RefundRadar finds late refunds, asks about missing ones, and works out what you're owed.</b></p>
-      <div class="drop demo">
-        <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></div>
-        <strong>Run a real audit on a sample statement</strong>
-        <p class="or">It finds the ₹5,200 a bank owes this made-up customer, and shows its work.</p>
-        <div class="formats"><span class="chip">Synthetic data</span>
-          <span class="chip">229 transactions</span><span class="chip">As of 24 Jul 2026</span></div>
-        <p class="note">This page can't take a file: it has no upload, and nothing you do here
-          leaves your browser. To audit your own statement,
-          <a href="https://github.com/Dhanu2626/refundradar#how-it-works">run RefundRadar on your computer</a>.</p>
-        <button type="button" class="primary choose" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Run the demo audit</button>
+      <h1 id="drop-h">Find failed payments and refunds in your bank statement.</h1>
+      <p class="lede">Upload the statement you download from your bank. RefundRadar reads every
+        transaction, checks each failed payment against RBI's refund deadlines, and
+        <b>works out the compensation your bank owes you.</b></p>
+      <div class="drop" id="drop">
+        <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
+        <strong>Drag &amp; drop your bank statement here</strong>
+        <p class="or">or</p>
+        <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Upload bank statement</button>
+        <ul class="banks" aria-label="Statements RefundRadar reads">
+          <li><b>SBI</b><span>Excel (.xlsx, .xls) or CSV, including the password-protected download</span></li>
+          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV or the Delimited .txt &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
+        </ul>
+        <p class="note">Also reads a CSV with the columns Date, Narration, Ref, Debit, Credit, Balance.
+          Other banks and PDF statements aren't supported yet.</p>
       </div>
-      <noscript><p class="error" style="display:block">This demo needs JavaScript to show the audit.</p></noscript>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
+      <p class="private"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Your statement is read on this device and never leaves it.</p>
+      <p class="sample">Don't have a statement?
+        <button type="button" id="demo-btn" class="link">Try the sample statement</button>
+        <span>(synthetic data)</span></p>
       <div class="features">
         <div class="feature"><span class="fi"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
           <b>Stays on this computer</b><p>No login. No signup. Your statement never leaves this computer.</p></div>
@@ -528,10 +547,43 @@
       </div>
     </section>
 
+    <section id="screen-check" class="hidden" aria-labelledby="check-h">
+      <p class="eyebrow" id="check-eyebrow">Statement detected</p>
+      <h1 id="check-h"></h1>
+      <div class="card hidden" id="unlock-card">
+        <p class="lead-in">Your bank locked this file with a password. Enter it to open the
+          statement here: it is used once, on this device, and never stored.</p>
+        <div class="field"><label for="pw">Statement password</label>
+          <input type="password" id="pw" autocomplete="off" spellcheck="false"></div>
+        <p class="field-error hidden" id="pw-error" role="alert"></p>
+        <p class="hint">Your bank's statement download page shows the password format. It is not
+          your login password.</p>
+        <div class="row">
+          <button type="button" class="primary" id="unlock-btn"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Open statement</button>
+          <button type="button" class="ghost again">Choose a different file</button>
+        </div>
+      </div>
+      <div class="card hidden" id="detected-card">
+        <dl class="facts">
+          <div><dt>Bank</dt><dd id="det-bank"></dd></div>
+          <div><dt>File</dt><dd id="det-type"></dd></div>
+          <div><dt>Transactions</dt><dd id="det-count"></dd></div>
+          <div><dt>Period</dt><dd id="det-period"></dd></div>
+        </dl>
+        <div class="verify" id="det-verify"></div>
+        <p class="hint">Nothing has been analysed yet. The analysis runs on this device.</p>
+        <div class="row">
+          <button type="button" class="primary" id="analyze-btn"><svg class="ic" aria-hidden="true"><use href="#i-radar"/></svg>Analyze statement</button>
+          <button type="button" class="ghost again">Choose a different file</button>
+        </div>
+      </div>
+      <div class="status" id="check-status" role="status" aria-live="polite"></div>
+    </section>
+
     <section id="screen-audit" class="hidden" aria-labelledby="audit-h">
       <div class="page-head">
         <div><p class="eyebrow">Audit results</p><h1 id="audit-h">Your refund audit</h1></div>
-        <a class="button ghost" href="https://github.com/Dhanu2626/refundradar#how-it-works">Audit your own statement</a>
+        <button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button>
       </div>
 
       <div class="card" id="statement-card">
@@ -593,9 +645,11 @@
         <div class="sec-head"><h2 id="conf-h"><span class="h-ic tone-ask"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Did a payment fail that never came back?</h2></div>
         <p class="hint">The statement alone can't prove a failure that was never
           reversed &mdash; a failed payment looks identical to a successful one.
-          In the app, you search the payment you remember and confirm it.</p>
-        <p class="verify">This demo confirmed one for you: <b id="demo-confirmed"></b>.
-          It is the &ldquo;Still missing&rdquo; finding above.</p>
+          Search the payment you remember and confirm it.</p>
+        <label class="lbl" for="search">Search your payments</label>
+        <div class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+          <input type="search" id="search" autocomplete="off" placeholder="Amount, name or date, e.g. 2499"></div>
+        <div id="candidates"></div>
       </section>
 
       <section class="card claim" id="claim-card" aria-labelledby="claim-h">
@@ -603,12 +657,13 @@
         <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
           citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
         <div class="fields">
-          <div class="field"><span class="ro-label">Name as on the account</span><div class="ro">A. Sample Customer</div></div>
-          <div class="field"><span class="ro-label">Account last 4 digits</span><div class="ro">2626</div></div>
-          <div class="field"><span class="ro-label">Email or phone for the reply</span><div class="ro">sample@example.com</div></div>
+          <div class="field"><label for="c-name">Name as on the account</label>
+            <input type="text" id="c-name" autocomplete="name" placeholder="A. Sample Customer"></div>
+          <div class="field"><label for="c-last4">Account last 4 digits</label>
+            <input type="text" id="c-last4" maxlength="4" inputmode="numeric" placeholder="1234"></div>
+          <div class="field"><label for="c-contact">Email or phone for the reply</label>
+            <input type="text" id="c-contact" placeholder="you@example.com"></div>
         </div>
-        <p class="hint">The demo fills these in for a sample customer. In the app, you type
-          your own, and they go only into the letter.</p>
         <p class="field-error hidden" id="pack-error" role="alert"></p>
         <div class="row">
           <button class="primary" id="pack-btn"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg>Generate complaint pack</button>
@@ -625,7 +680,7 @@
       </section>
     </section>
 
-    <footer class="foot"><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This demo reads a synthetic statement; the app runs 100% on your computer.</span>
+    <footer class="foot"><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. Runs entirely in your browser.</span>
       <span>Self-help tool, not legal advice &mdash; verify details before submitting any complaint.</span></footer>
   </div>
   </main>
@@ -633,8 +688,8 @@
 
 <script>
 // The view: how a result looks. The public demo page runs this block unchanged.
-const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
-                fileName: "", packText: "" };
+const state = { csv: null, file: null, confirmed: new Set(), confirmedRows: new Set(),
+                pairs: [], fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
 // statement text (narrations, references, file names) is data, never markup
@@ -661,7 +716,47 @@ function setStage(stage) {
   });
 }
 
-function setStatus(msg) { $("status").textContent = msg; $("st-status").textContent = msg; }
+function setStatus(msg) {
+  for (const id of ["status", "check-status", "st-status"]) $(id).textContent = msg;
+}
+
+// one screen at a time: the doorway, the statement found in the file, the audit
+function showScreen(name) {
+  for (const s of ["drop", "check", "audit"]) $(`screen-${s}`).classList.toggle("hidden", s !== name);
+}
+
+// a statement the bank locked: its password opens it here, once
+function showLocked(fileName, wrong) {
+  showScreen("check");
+  setStage("upload");
+  $("check-eyebrow").textContent = "Password-protected statement";
+  $("check-h").textContent = fileName;
+  $("detected-card").classList.add("hidden");
+  $("unlock-card").classList.remove("hidden");
+  $("pw-error").textContent = wrong ? "That password didn't open it. Check it and try again." : "";
+  $("pw-error").classList.toggle("hidden", !wrong);
+  setStatus(wrong ? "That password didn't open the file." : `${fileName} is password-protected.`);
+  $("pw").focus();
+}
+
+// what the file turned out to be, before anything is analysed
+function showDetected(s, fileName) {
+  showScreen("check");
+  setStage("upload");
+  $("check-eyebrow").textContent = "Statement detected";
+  $("check-h").textContent = fileName;
+  $("unlock-card").classList.add("hidden");
+  $("detected-card").classList.remove("hidden");
+  $("det-bank").textContent = s.bank === "generic" ? "None named (generic CSV)" : s.bank;
+  $("det-type").textContent = s.file_type + (s.unlocked_file ? ", opened with your password" : "");
+  $("det-count").textContent = `${s.transactions} (${s.payments} out, ${s.credits} in)`;
+  $("det-period").textContent = s.first ? `${day(s.first)} – ${day(s.last)}` : "–";
+  $("det-verify").textContent = s.verification;
+  $("det-verify").classList.toggle("caution", s.verification.includes("synthetically"));
+  setStatus(`Found ${s.bank === "generic" ? "a generic CSV" : `an ${s.bank}`} statement ` +
+            `with ${s.transactions} transactions.`);
+  $("analyze-btn").focus({ preventScroll: true });
+}
 
 function showError(msg) {
   const e = $("error"); e.textContent = msg; e.style.display = msg ? "block" : "none";
@@ -728,15 +823,14 @@ function render(data) {
   const a = data.audit, s = data.summary, st = data.statement;
   const fresh = $("screen-audit").classList.contains("hidden");
   state.candidates = data.candidates;
-  $("screen-drop").classList.add("hidden");
-  $("screen-audit").classList.remove("hidden");
+  showScreen("audit");
   if (fresh) window.scrollTo(0, 0);  // answering a question keeps your place
   setStage("review");
   $("pack-card").classList.add("hidden");  // the answers changed: the letter must be made again
   $("st-name").textContent = state.fileName;
   $("st-format").textContent = st.format === "generic" ? "Generic CSV" : `${st.format} export`;
   $("st-verify").textContent = st.verification;
-  $("st-verify").classList.toggle("caution", st.format === "HDFC");
+  $("st-verify").classList.toggle("caution", st.verification.includes("synthetically"));
   $("sum-txns").textContent = s.transactions;
   $("sum-found").textContent = s.refunds_found;
   $("sum-matched").textContent = s.matched;
@@ -770,27 +864,29 @@ function render(data) {
       state.pairs.push([Number(b.dataset.pay), Number(b.dataset.refund)]);
       runAudit();
     }));
-  // the public demo page has no search box: it can't audit again
-  if ($("search")) renderCandidates($("search").value.trim().toLowerCase());
+  renderCandidates($("search").value.trim().toLowerCase());
 }
 
 function renderCandidates(q) {
   const list = (state.candidates || [])
-    .filter((c) => !state.confirmed.has(c.ref))
+    .filter((c) => c.ref === null ? !state.confirmedRows.has(c.row) : !state.confirmed.has(c.ref))
     .filter((c) => !q || c.narration.toLowerCase().includes(q) ||
                    c.amount.includes(q) || c.date.includes(q))
     .slice(0, 8);
   $("candidates").innerHTML = list.map((c) => {
     const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    // no reference printed: its place on the statement tells it from any look-alike
+    const noRef = c.ref === null ? ` &middot; <span class="noref">no reference &middot; transaction ${c.row + 1}</span>` : "";
     return `<div class="inc plain"><div class="main">
-        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}</div>
+        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}${noRef}</div>
         <div class="sub narr">${esc(c.narration)}</div></div>
-        <div class="act"><button data-ref="${esc(c.ref)}" class="mark-failed ask">This payment failed</button></div></div>`;
+        <div class="act"><button ${c.ref === null ? `data-row="${c.row}"` : `data-ref="${esc(c.ref)}"`} class="mark-failed ask">This payment failed</button></div></div>`;
   }).join("") || `<p class="empty">${q ? `No payment matches &ldquo;${esc(q)}&rdquo;.`
                                        : "Type to search your payments."}</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
     b.addEventListener("click", () => {
-      state.confirmed.add(b.dataset.ref);
+      if (b.dataset.row !== undefined) state.confirmedRows.add(Number(b.dataset.row));
+      else state.confirmed.add(b.dataset.ref);
       $("search").value = "";  // that search is done; the payment is now a finding
       runAudit();
     }));
@@ -834,35 +930,216 @@ $("download-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 </script>
-<script type="application/json" id="demo-data">{"file_name": "demo_statement.csv (synthetic)", "response": {"audit": {"as_of": "2026-07-24", "statement_lines": 229, "total_owed_inr": 5200, "stuck_amount": "2499.00", "on_time_count": 1, "incidents": [{"status": "refunded_on_time", "time_barred": false, "reason": "Failed transaction, reversed within the deadline.", "date": "2026-01-21", "amount": "750.00", "narration": "UPI/DR/822439055664/SWIGGY.ORDER@ICICI/FAILED PAYMENT", "ref": "822439055664", "channel_name": "UPI person-to-merchant", "deadline": "2026-01-26", "refund_date": "2026-01-24", "days_late": 0, "compensation_inr": 0, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5", "txn_id": 27, "action": "none", "refund_id": 33, "candidates": []}, {"status": "refunded_late", "time_barred": false, "reason": "Failed transaction, reversed 8 days past the deadline.", "date": "2026-02-15", "amount": "2000.00", "narration": "UPI/DR/585096075773/PAYTMQR2810050501@PAYTM/GROCERIES", "ref": "585096075773", "channel_name": "UPI person-to-merchant", "deadline": "2026-02-20", "refund_date": "2026-02-28", "days_late": 8, "compensation_inr": 800, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5", "txn_id": 60, "action": "none", "refund_id": 79, "candidates": []}, {"status": "refunded_late", "time_barred": false, "reason": "Failed transaction, reversed 6 days past the deadline.", "date": "2026-03-12", "amount": "5000.00", "narration": "ATW-512967XX1234-S1CN289386157692-BEGUMPET", "ref": "289386157692", "channel_name": "ATM / Micro-ATM cash withdrawal", "deadline": "2026-03-17", "refund_date": "2026-03-23", "days_late": 6, "compensation_inr": 600, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: ATM / Micro-ATM cash withdrawal — reversal by T+5", "txn_id": 99, "action": "none", "refund_id": 111, "candidates": []}, {"status": "excluded_genuine_refund", "time_barred": false, "reason": "Money came back, but the wording says merchant refund (returned order), not a failed-transaction reversal — no compensation applies.", "date": "2026-04-06", "amount": "1299.00", "narration": "UPI/DR/276460218586/MYNTRA.PAYU@AXIS/ORDER 8817", "ref": "276460218586", "channel_name": "UPI person-to-merchant", "deadline": null, "refund_date": "2026-04-16", "days_late": null, "compensation_inr": null, "citation": null, "txn_id": 124, "action": "none", "refund_id": 143, "candidates": []}, {"status": "never_refunded", "time_barred": false, "reason": "You confirmed this payment failed and no refund row exists — compensation accrues every day until reversal.", "date": "2026-06-15", "amount": "2499.00", "narration": "UPI/DR/444363915096/9876543210@OKHDFC/TRANSFER", "ref": "444363915096", "channel_name": "UPI person-to-person", "deadline": "2026-06-16", "refund_date": null, "days_late": 38, "compensation_inr": 3800, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-person — reversal by T+1", "txn_id": 205, "action": "none", "refund_id": null, "candidates": []}]}, "candidates": [], "statement": {"filename": null, "format": "generic", "transactions": 229, "verification": "Generic CSV (Date, Narration, Ref, Debit, Credit, Balance)."}, "summary": {"transactions": 229, "refunds_found": 4, "matched": 4, "needs_confirmation": 0, "unable_to_match": 0}, "unmatched": []}, "pack": "# Complaint pack — generated 2026-07-24 by RefundRadar\n\n## Part 1 — Grievance letter to the bank\n\nTo: The Branch Manager / Grievance Redressal Cell\nFrom: A. Sample Customer (account ending 2626)\nContact: sample@example.com\nDate: 2026-07-24\n\nSubject: Claim of customer compensation for delayed reversal of failed transactions under RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019\n\nDear Sir/Madam,\n\nThe RBI circular cited above harmonises the turn-around time for the reversal of failed transactions and mandates compensation of Rs.100 per day of delay, payable suo moto — without the customer having to ask.\n\nAn audit of my account statement shows the following failed transactions where the mandated deadline was not met:\n\n| # | Date | Channel | Amount (Rs.) | Reference | Reversal deadline | Reversed on | Days late | Compensation due (Rs.) |\n|---|------|---------|--------------|-----------|-------------------|-------------|-----------|------------------------|\n| 1 | 2026-02-15 | UPI person-to-merchant | 2000.00 | 585096075773 | 2026-02-20 | 2026-02-28 | 8 | 800 |\n| 2 | 2026-03-12 | ATM / Micro-ATM cash withdrawal | 5000.00 | 289386157692 | 2026-03-17 | 2026-03-23 | 6 | 600 |\n| 3 | 2026-06-15 | UPI person-to-person | 2499.00 | 444363915096 | 2026-06-16 | NOT YET REVERSED | 38 | 3800 |\n\n**Total compensation due as of 2026-07-24: Rs.5200**, plus Rs.2499.00 of principal still not reversed, with compensation continuing to accrue at Rs.100/day per incident until reversal.\n\nI request that (a) any unreversed principal be credited immediately, and (b) the compensation above be credited to my account within 7 working days, failing which I will escalate to the RBI Ombudsman under the Integrated Ombudsman Scheme, 2021.\n\nYours faithfully,\nA. Sample Customer\n\n## Part 2 — Escalation timeline\n\n- 2026-07-24 — letter submitted to the bank\n- 2026-08-23 — if no satisfactory resolution by this date, the RBI Ombudsman route unlocks\n\n## Part 3 — RBI Ombudsman draft (use only after 30 days or rejection)\n\nFile online at https://cms.rbi.org.in (no fee, no lawyer needed).\n\nSuggested complaint text:\n\n> I hold an account ending 2626. The failed transactions listed in the attached table were not reversed within the TAT mandated by RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, and the compensation of Rs.100/day payable suo moto under the same circular was not credited. I complained to my bank on 2026-07-24 and did not receive resolution within 30 days. I request the reversal of any outstanding principal and payment of compensation totalling Rs.5200 (as of 2026-07-24, still accruing for unreversed items).\n\nAttach: the evidence table above and your account statement for the relevant period.\n\n## Citations\n\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: ATM / Micro-ATM cash withdrawal — reversal by T+5\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-person — reversal by T+1\n\n---\n*Generated by RefundRadar, a self-help tool that applies RBI's published circulars to your own statement. It is not legal advice. Verify the details above against your records before submitting.*", "confirmed": ["444363915096"]}</script>
+<script src="pyodide/pyodide.js"></script>
 <script>
-// The public demo, built by tools/build_demo_page.py: what the app answers for its
-// demo statement, frozen into this page. It has no file input, no form and no
-// network call, so it can never receive a statement.
-const DEMO = JSON.parse($("demo-data").textContent);
+// Every request is answered in this browser: RefundRadar's own routes
+// (refundradar/webapp.py) run under Pyodide, loaded from this site, so a
+// statement chosen here is read in this page and sent nowhere.
+const ENGINE_FILES = ["vendor/xlrd-2.0.2-py2.py3-none-any.whl", "vendor/openpyxl-3.1.5-py2.py3-none-any.whl", "vendor/et_xmlfile-2.0.0-py3-none-any.whl", "vendor/olefile-0.47-py2.py3-none-any.whl", "vendor/pyyaml-6.0.3-pure.zip", "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl", "engine.zip"];
+let engineReady = false;
+const runtime = loadPyodide({ indexURL: "pyodide/" });
+const engine = (async () => {
+  const py = await runtime;
+  for (const f of ENGINE_FILES)
+    py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
+  py.runPython("import sys; sys.path.insert(0, '/engine')");
+  return py.pyimport("bridge");
+})();
+engine.then(() => { engineReady = true; engineState("ready", "ready"); },
+            () => engineState("failed", "couldn't start in this browser"));
 
-$("demo-btn").addEventListener("click", () => {
+// Opening a password-protected file takes Pyodide's build of cryptography,
+// from this site, checked against pyodide-lock.json: fetched the first time a
+// password is typed, so nobody else downloads it.
+let unlocker = null;
+const canUnlock = () => unlocker ??= runtime.then((py) => py.loadPackage("cryptography"));
+
+function engineState(state, words) {
+  const el = $("engine-state");
+  el.dataset.state = state;
+  el.textContent = words;
+}
+
+async function send(path, body) {
+  if (!engineReady) {
+    setStatus("Starting RefundRadar in your browser…");
+    document.body.classList.add("busy");
+  }
+  let bridge;
+  try {
+    bridge = await engine;
+  } catch (_) {
+    document.body.classList.remove("busy");
+    throw new Error("RefundRadar couldn't start in this browser. " +
+                    "Run it on your computer instead: it works the same.");
+  }
+  if (body !== undefined && body.password) {
+    try {
+      await canUnlock();
+    } catch (_) {
+      unlocker = null;
+      throw new Error("The part that opens password-protected files couldn't load. Try " +
+                      "again, or save the file unprotected from Excel and choose that copy.");
+    }
+  }
+  await new Promise((r) => setTimeout(r, 16));  // let "Auditing…" show before the engine works
+  const out = bridge.call(body === undefined ? "GET" : "POST", path,
+                          body === undefined ? "" : JSON.stringify(body));
+  const [status, type, text] = out.toJs();
+  out.destroy();
+  return new Response(text, { status, headers: { "Content-Type": type } });
+}
+</script>
+<script>
+// Reading your file and asking RefundRadar about it.
+
+// the statement as RefundRadar needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], confirmed_rows: [...state.confirmedRows],
+           pairs: state.pairs, ...extra };
+}
+
+async function api(path, body) {
+  const res = await send(path, body);
+  if (!res.ok) {
+    let detail = "Something went wrong.";
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return res;
+}
+
+async function runAudit() {
   showError("");
-  state.fileName = DEMO.file_name;
-  render(DEMO.response);
-  const note = $("demo-confirmed");
-  if (note) note.textContent = DEMO.response.audit.incidents
-    .filter((i) => DEMO.confirmed.includes(i.ref))
-    .map((i) => `${i.channel_name} · ${inr(i.amount)} · ${day(i.date)}`).join("; ");
-  setStatus("Audit complete.");
+  setStatus(`Auditing ${state.fileName}…`);
+  document.body.classList.add("busy");
+  try {
+    const res = await api("/api/audit", payload());
+    render(await res.json());
+    setStatus("Audit complete.");
+  } catch (err) {
+    // an unreadable statement gets no result at all, only the reason
+    showScreen("drop");
+    setStage("upload");
+    setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
+    showError(err.message);
+    window.scrollTo(0, 0);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+// Step one: what is this file? Its bank, its transactions, its dates; nothing
+// is analysed until you say so. A locked file comes back open, so its
+// password is used once and never kept.
+async function checkStatement(password) {
+  showError("");
+  setStatus(`Reading ${state.fileName}…`);
+  document.body.classList.add("busy");
+  try {
+    const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                    : { csv: state.csv };
+    const s = await (await api("/api/statement",
+                               password === undefined ? src : { ...src, password })).json();
+    if (s.locked) { showLocked(state.fileName, s.wrong_password); return; }
+    if (s.unlocked_file) state.file = s.unlocked_file;
+    showDetected(s, state.fileName);
+    window.scrollTo(0, 0);
+  } catch (err) {
+    showScreen("drop");
+    setStage("upload");
+    setStatus(`Could not read ${state.fileName}. Nothing was analysed.`);
+    showError(err.message);
+    window.scrollTo(0, 0);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+function unlock() {
+  const pw = $("pw").value;
+  $("pw").value = "";
+  if (!pw) { showLocked(state.fileName, false); return; }
+  checkStatement(pw);
+}
+
+$("search").addEventListener("input", (e) => renderCandidates(e.target.value.trim().toLowerCase()));
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+$("drop").addEventListener("dragleave", () => $("drop").classList.remove("over"));
+$("drop").addEventListener("drop", (e) => {
+  e.preventDefault(); $("drop").classList.remove("over");
+  if (e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+});
+$("file").addEventListener("change", (e) => { if (e.target.files.length) readFile(e.target.files[0]); });
+
+function readFile(f) {
+  showError("");
+  Object.assign(state, { csv: null, file: null, fileName: f.name,
+                         confirmed: new Set(), confirmedRows: new Set(), pairs: [] });
+  setStatus(`Reading ${f.name}…`);
+  const reader = new FileReader();
+  reader.onload = () => { state.file = toBase64(reader.result); checkStatement(); };
+  reader.onerror = () => { setStatus(`Could not read ${f.name}.`);
+                           showError("The browser could not read that file."); };
+  reader.readAsArrayBuffer(f);  // .xls and .xlsx are binary: send the bytes as they are
+}
+
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// the sample goes through the same steps as your own file; nothing is answered for you
+$("demo-btn").addEventListener("click", async () => {
+  showError("");
+  try {
+    const data = await (await api("/api/demo")).json();
+    Object.assign(state, { csv: data.csv, file: null, pairs: [], confirmed: new Set(),
+                           confirmedRows: new Set(), fileName: "Sample statement (synthetic)" });
+    checkStatement();
+  } catch (err) { showError(err.message); }
 });
 
-$("pack-btn").addEventListener("click", () => { showError(""); showPack(DEMO.pack); });
-$("reset-btn").addEventListener("click", () => location.reload());
+$("unlock-btn").addEventListener("click", unlock);
+$("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+$("analyze-btn").addEventListener("click", runAudit);
 
-// a file dropped here is never read: say so, rather than let the browser open it
-document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => {
-  e.preventDefault();
-  showError("This live demo can't take a file, and it didn't read that one. " +
-            "To audit your own statement, run RefundRadar on your computer.");
-  window.scrollTo(0, 0);
+// back to the doorway, forgetting the statement and every answer about it
+function startOver() {
+  Object.assign(state, { csv: null, file: null, fileName: "", confirmed: new Set(),
+                         confirmedRows: new Set(), pairs: [], packText: "", candidates: [] });
+  $("file").value = ""; $("search").value = ""; $("pw").value = "";
+  $("pack").textContent = "";
+  for (const id of ["pack", "download-btn", "pack-card"]) $(id).classList.add("hidden");
+  showError(""); packError(""); setStatus("");
+  showScreen("drop"); setStage("upload"); window.scrollTo(0, 0);
+}
+document.querySelectorAll(".again").forEach((b) =>
+  b.addEventListener("click", () => { startOver(); $("file").click(); }));
+
+$("pack-btn").addEventListener("click", async () => {
+  showError(""); packError("");
+  const name = $("c-name").value.trim(), last4 = $("c-last4").value.trim(),
+        contact = $("c-contact").value.trim();
+  if (!name || !last4 || !contact) { packError("Fill the three details for the letter first."); return; }
+  document.body.classList.add("busy");
+  try {
+    const res = await api("/api/complaint",
+                          payload({ name, account_last4: last4, contact }));
+    showPack(await res.text());
+  } catch (err) { packError(err.message); }
+  finally { document.body.classList.remove("busy"); }
 });
+
+$("reset-btn").addEventListener("click", startOver);
+$("new-btn").addEventListener("click", startOver);
 </script>
 </body>
 </html>
