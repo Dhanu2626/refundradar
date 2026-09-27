@@ -9,13 +9,26 @@ pre-filled fields → get your letter.
 
 ## Screen 1 — the doorway
 
-- One drop zone: "Drop your bank statement here."
-- One trust line: "No login. No signup. Your statement never leaves this computer."
-- "Try with a demo statement" button — see the product work on synthetic data
-  BEFORE being asked to trust it with real data. Show, then ask.
+- One action first: "Upload bank statement", or drag and drop it anywhere on the zone.
+- Name what it reads: SBI and HDFC, with their formats and how far each is tested;
+  other banks and PDFs are said to be unsupported, not guessed at.
+- One trust line: "Your statement is read on this device and never leaves it."
+- A secondary link, after the upload: "Don't have a statement? Try the sample
+  statement." It goes through exactly the same steps, and nothing in it is answered
+  for you. *(Changed 2026-09-27: the sample used to be a button beside the drop zone
+  that pre-confirmed its own answers; the first thing a visitor meets is now their
+  own statement.)*
 - "How do I get my statement?" helper: pick your bank → screenshots of exactly
   where the CSV/Excel export hides in that bank's netbanking. For ordinary users
   this is the hardest step in the whole journey; treat it as a first-class feature.
+
+## Screen 1½ — what we found in your file (added 2026-09-27)
+
+- Before any analysis: the bank, the file type, how many transactions were read,
+  and the dates they cover, plus how far that bank's reader is tested.
+- "Analyze statement" runs the audit; "Choose a different file" goes back.
+- A password-protected file (SBI's download) asks for its password here. It is used
+  once, on the device, and never stored; a wrong one is said to be wrong.
 
 ## Screen 2 — the audit
 

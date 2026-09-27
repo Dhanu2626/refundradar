@@ -245,3 +245,34 @@ prototype in a folder: a product other people can run."
 
 **Next:** council move 4 (per-bank statement-download helper), a second bank
 parser when a real sample is available, or field-testing with family statements.
+
+## Day 11 — 2026-09-27 · The live page becomes the product
+
+"Try the live demo" now opens the app itself, running in the visitor's browser:
+upload an SBI or HDFC statement, see what was found in it, analyse it, answer only
+the questions the rules require, download the letter. The frozen synthetic page of
+Day 9 is gone; the sample statement is a secondary link that answers nothing for you.
+
+🏦 **Payments/RegTech insight:** the bank this product was field-tested on was the
+one bank its web app refused — the SBI reader skipped rows it couldn't read, and a
+skipped row can be the very refund being audited. Reading strictly (stop and name
+the row, and make the bank's own running balance add up) is what made it safe to
+accept SBI at all. For money, "I read 106 rows" means nothing unless you can say
+nothing was dropped.
+
+🔧 **Engineering insight:** realistic mock statements found a bug that tidy
+fixtures never would: HDFC's NEFT narrations say "NETBANK, MUM", and the Delimited
+download doesn't quote them, so one comma shifted every later column and the strict
+reader (rightly) refused the file. The fix joins the surplus fields back into the
+narration, the only free-text column, and still makes the balance add up. The same
+day: Python running in the browser (Pyodide) verified in Chromium, Firefox and
+WebKit, and the 13 MB first load now shows its progress instead of looking stuck.
+
+🎯 **Interview line:** "I turned a static demo into the product itself: the real
+Python engine runs in the visitor's browser, so a stranger can audit their own bank
+statement without it ever leaving their device — enforced by the browser's content
+security policy, not by a promise — and I verified it in three browser engines."
+
+**Next:** a real HDFC export and a real SBI file through the strict readers (the
+only proof left for either), the per-bank statement-download helper, and PDF
+statements, which are what many banking apps hand out.

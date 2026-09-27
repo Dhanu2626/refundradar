@@ -153,7 +153,12 @@ assumption into a visible, reportable error instead of a wrong number.
   column, both, neither); whether the .xls download is genuine BIFF or an HTML table;
   the Delimited download's file extension (tests assume .txt; the web app accepts
   .txt and .csv, and reads the content whatever the name);
-  whether long narrations wrap onto continuation rows.
+  whether long narrations wrap onto continuation rows; whether the Delimited
+  download quotes a narration that holds a comma (HDFC's NEFT narrations say
+  "NETBANK, MUM"). If it doesn't, the row has more fields than the header: the
+  narration is the only free-text column, so the surplus fields are joined back
+  into it (2026-09-27, found by the realistic mocks in samples/realistic/), and
+  the dates, amounts and balance must still add up.
 
 **Risk:** the first real HDFC statement may stop on a row shape the parser has never
 seen, and every inferred rule above is a candidate. That is the intended failure; the
@@ -300,6 +305,13 @@ site itself and forbids form submission, and the browser enforces that whatever 
 script tries. The first visit costs about 14 MB. The vendored runtime is trusted as
 pinned; upgrading it means fetching and re-pinning it (build_demo_page.py
 --fetch-runtime).
+
+**Update 2026-09-27:** the page fetches 13.1 MB before it can read a statement (7 to
+12 MB over the wire, depending on the host's compression; 32 s on a throttled 4 Mbps
+connection) and now shows the download as a percentage while it arrives; a locked
+file adds 2.4 MB. The whole journey was run in Firefox 156 and WebKitGTK 2.52 as well
+as Chromium, at desktop width and a 390px phone viewport, including decrypting SBI's
+locked download. Real Safari (Apple's WebKit port) has not been run.
 
 ## D16 — SBI is read strictly, and so the web app reads it (2026-09-27)
 

@@ -2,3 +2,5 @@
 # check it out byte for byte, never with converted line endings.
 docs/pyodide/** -text
 docs/vendor/** -text
+# The realistic bank downloads keep their own bytes, CRLF line endings included.
+samples/realistic/** -text

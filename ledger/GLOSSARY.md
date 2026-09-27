@@ -53,3 +53,17 @@
   shared. Requires registered FIU status to use — our documented v2 ambition.
 - **Data minimisation** — collect only what the task needs; RefundRadar v1 asks
   for nothing but the statement file itself.
+- **Pyodide / WebAssembly** — Python compiled to run inside a web browser; lets the
+  live page run RefundRadar's own code on the visitor's device instead of a server.
+- **Content-Security-Policy (CSP)** — rules a page gives the browser about what it
+  may load and where it may connect; ours allows only its own site, so a statement
+  cannot be sent anywhere else even by a script.
+- **Strict reader** — a statement parser that stops and names any row it can't
+  account for, and checks the bank's running balance, instead of skipping rows.
+- **Delimited export** — HDFC's plain-text download: comma-separated, space-padded,
+  and (as far as known) unquoted, so a comma inside a narration splits it.
+- **Agile encryption** — how Office files (and SBI's statement download) are
+  password-protected: AES with a key stretched from the password.
+- **WebKit** — the browser engine behind Safari; tested here as WebKitGTK, the same
+  engine family, since real Safari runs only on Apple devices.
+
