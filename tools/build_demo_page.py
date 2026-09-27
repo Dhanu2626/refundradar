@@ -115,6 +115,29 @@ TRANSPORT = """<script src="pyodide/pyodide.js"></script>
 // statement chosen here is read in this page and sent nowhere.
 const ENGINE_FILES = [@FILES@];
 let engineReady = false;
+
+// The first visit downloads the Python runtime (the browser keeps it after):
+// count it as it arrives, so a slow connection shows progress, not a stall.
+// Responses pass through unchanged; only their bytes are counted.
+const RUNTIME_BYTES = @BYTES@;
+let arrived = 0;
+const plainFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await plainFetch(...args);
+  if (engineReady || !res.body || typeof TransformStream !== "function") return res;
+  const counted = res.body.pipeThrough(new TransformStream({
+    transform(chunk, out) { arrived += chunk.byteLength; showArrival(); out.enqueue(chunk); },
+  }));
+  return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
+};
+function showArrival() {
+  if (engineReady) return;
+  const words = `starting… ${Math.min(99, Math.floor(100 * arrived / RUNTIME_BYTES))}% of ` +
+                `${(RUNTIME_BYTES / 1e6).toFixed(1)} MB (first visit only)`;
+  engineState("loading", words);
+  if (document.body.classList.contains("busy")) setStatus(`Starting RefundRadar in your browser: ${words}`);
+}
+
 const runtime = loadPyodide({ indexURL: "pyodide/" });
 const engine = (async () => {
   const py = await runtime;
@@ -148,8 +171,8 @@ async function send(path, body) {
     bridge = await engine;
   } catch (_) {
     document.body.classList.remove("busy");
-    throw new Error("RefundRadar couldn't start in this browser. " +
-                    "Run it on your computer instead: it works the same.");
+    throw new Error("RefundRadar couldn't start in this browser. Update it, or open this page in " +
+                    "a current Chrome, Edge, Firefox or Safari (iPhone: iOS 16.4 or later).");
   }
   if (body !== undefined && body.password) {
     try {
@@ -226,11 +249,20 @@ def build_engine() -> bytes:
     return _zip(engine_files())
 
 
+def runtime_bytes() -> int:
+    """What the page fetches before it can read a statement: Pyodide's wasm,
+    standard library and lock file, the packages and the engine."""
+    fetched = ["pyodide/pyodide.asm.wasm", "pyodide/python_stdlib.zip", "pyodide/pyodide-lock.json",
+               *PACKAGES]
+    return sum((DOCS / f).stat().st_size for f in fetched) + len(build_engine())
+
+
 def render() -> str:
     """The app's page with its demo-swap blocks replaced: the live demo."""
     page = INDEX.read_text(encoding="utf-8")
     files = ", ".join(f'"{p}"' for p in [*PACKAGES, "engine.zip"])
-    parts = {"title": TITLE, "footer": FOOTER, "transport": TRANSPORT.replace("@FILES@", files)}
+    parts = {"title": TITLE, "footer": FOOTER,
+             "transport": TRANSPORT.replace("@FILES@", files).replace("@BYTES@", str(runtime_bytes()))}
     marked = SWAP.findall(page)
     if sorted(marked) != sorted(parts):
         raise SystemExit(f"{INDEX.name} marks the demo-swap blocks {sorted(marked)}; "

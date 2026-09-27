@@ -18,9 +18,10 @@ from pydantic import BaseModel
 from refundradar.audit import build_audit, to_dict
 from refundradar.complaint import generate_complaint_pack
 from refundradar.formats import EncryptedStatement, WrongPassword, decrypt, sniff
-from refundradar.model import UNSUPPORTED_CHANNELS, Transaction
+from refundradar.model import Transaction
 from refundradar.parser import NO_BANK_TABLE, parse_generic_csv_text, parse_statement_bytes
-from refundradar.reconcile import CONFIRM, has_reference, refund_like, unmatched_refunds
+from refundradar.reconcile import (CONFIRM, can_confirm_failed, has_reference, refund_like,
+                                   unmatched_refunds)
 from refundradar.rules_engine import load_rules
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples"
@@ -137,12 +138,6 @@ def _chosen_refunds(req: AuditRequest, txns: list[Transaction]) -> list[tuple]:
     return chosen
 
 
-def _confirmable(t: Transaction) -> bool:
-    """A payment the user may say failed: a debit on a channel the 2019
-    circular covers. Its failure can't show on the statement (D6)."""
-    return t.is_debit and bool(t.channel) and t.channel not in UNSUPPORTED_CHANNELS
-
-
 def _confirmed_rows(req: AuditRequest, txns: list[Transaction]) -> list[Transaction]:
     """The payments without a reference the user said failed, by their row
     on this statement (D14). A payment with a reference is confirmed by it."""
@@ -151,7 +146,7 @@ def _confirmed_rows(req: AuditRequest, txns: list[Transaction]) -> list[Transact
     chosen = []
     for n in req.confirmed_rows:
         t = txns[n] if 0 <= n < len(txns) else None
-        if t is None or has_reference(t) or not _confirmable(t):
+        if t is None or has_reference(t) or not can_confirm_failed(t):
             raise HTTPException(
                 status_code=400,
                 detail="A payment you confirmed doesn't fit this statement. "
@@ -272,7 +267,7 @@ def audit_endpoint(req: AuditRequest) -> dict:
             "narration": t.narration,
         }
         for t in txns
-        if _confirmable(t) and (t.ref not in flagged if t.ref
+        if can_confirm_failed(t) and (t.ref not in flagged if t.ref
                                 else not has_reference(t) and id(t) not in findings)
     ]
     fmt = txns[0].bank if txns else "generic"

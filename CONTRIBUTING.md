@@ -21,7 +21,9 @@ fake references) and test against that. Real data stays on your machine, always.
    position** — banks reshuffle layouts.
 3. Add tests in `tests/` using synthetic rows in that bank's shape. Cover: the header hiding
    below preamble rows, both text and serial dates, comma-formatted amounts, and any
-   reversal wording the bank uses.
+   reversal wording the bank uses. Then build a whole synthetic download in the bank's
+   real layout, as `tools/make_realistic_statements.py` does for SBI and HDFC: that is
+   what caught HDFC's unquoted comma.
 4. Check whether the bank ties a reversal to the original payment by reference. Some (SBI)
    issue reversals under a **fresh** reference — if so, the amount+timing fallback in
    [`refundradar/reconcile.py`](refundradar/reconcile.py) is what catches it.

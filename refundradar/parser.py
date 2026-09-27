@@ -302,6 +302,24 @@ def _column_name(header: list, i: int) -> str:
     return name or f"column {i + 1}"
 
 
+def _rejoin_narration(row: list, width: int, narration: int) -> list:
+    """A row of the Delimited download with its narration back in one piece.
+
+    That export separates fields with commas and, as far as is known, doesn't
+    quote them, so a narration such as HDFC's NEFT "...-NETBANK, MUM-..." comes
+    out as two fields and pushes every later column one place right. The
+    narration is the only free-text column, so the surplus cells are its own;
+    the dates, amounts and running balance are still checked after.
+    """
+    surplus = len(row) - width
+    while surplus > 0 and str(row[-1] if row[-1] is not None else "").strip() == "":
+        row, surplus = row[:-1], surplus - 1  # trailing empty cells aren't text
+    if surplus <= 0:
+        return row
+    text = ",".join(str(c) for c in row[narration:narration + surplus + 1])
+    return row[:narration] + [text] + row[narration + surplus + 1:]
+
+
 def _refuse_rows_after_summary(rows: list[list], cols: dict, summary_idx: int) -> None:
     """Nothing but totals may follow the summary: a second statement or
     transactions pasted below it would otherwise never be read."""
@@ -355,7 +373,7 @@ def parse_hdfc_rows(rows: list[list]) -> list[Transaction]:
     txns = []
     ledger = []  # (row number, balance change, printed Closing Balance)
     for idx in range(header_idx + 1, len(rows)):
-        row, row_no = rows[idx], idx + 1
+        row, row_no = _rejoin_narration(rows[idx], len(header), cols["narration"]), idx + 1
         cells = ["" if c is None else str(c).strip() for c in row]
         if any("statement summary" in c.lower() for c in cells):
             _refuse_rows_after_summary(rows, cols, idx)

@@ -75,8 +75,11 @@ def test_the_demo_page_cannot_send_a_statement_anywhere():
     for reach in ("<form", "xmlhttprequest", "websocket", "sendbeacon", "eventsource", "<iframe"):
         assert reach not in lowered, reach
     assert all(not re.match(r"(https?:)?//", src) for src in re.findall(r'\ssrc="([^"]+)"', PAGE))
-    # its one network call fetches the engine files; every request is answered in the page
-    assert PAGE.count("fetch(") == 1 and "await (await fetch(f)).arrayBuffer()" in PAGE
+    # its own requests fetch the engine files; the progress counter passes Pyodide's
+    # requests through unchanged; every statement request is answered in the page
+    assert sorted(re.findall(r"\w*fetch\(", PAGE, re.I)) == ["fetch(", "plainFetch("]
+    assert "await (await fetch(f)).arrayBuffer()" in PAGE
+    assert "const res = await plainFetch(...args);" in PAGE
 
 
 def test_the_vendored_runtime_is_the_pinned_one():
@@ -96,6 +99,12 @@ def test_what_opens_locked_files_is_pyodides_own_build_fetched_only_when_needed(
     startup = re.search(r"const ENGINE_FILES = \[(.*?)\];", PAGE).group(1)
     assert "cryptography" not in startup  # not in what every visitor downloads
     assert 'py.loadPackage("cryptography")' in PAGE and "body.password" in PAGE
+
+
+def test_the_first_visit_counts_what_it_downloads():
+    # the counter's total is exactly what the page fetches before it can read a file
+    assert f"const RUNTIME_BYTES = {bd.runtime_bytes()};" in PAGE
+    assert bd.runtime_bytes() > 10_000_000 and "(first visit only)" in PAGE
 
 
 def test_the_page_presents_the_product_not_a_tour():
@@ -150,6 +159,8 @@ def _requests():
     hdfc = (SAMPLES / "hdfc_statement.csv").read_bytes()
     xls = (SAMPLES / "hdfc_statement.xls").read_bytes()
     sbi = (SAMPLES / "sbi_statement.xlsx").read_bytes()
+    real_txt = (SAMPLES / "realistic" / "hdfc_delimited.txt").read_bytes()
+    real_xls = (SAMPLES / "realistic" / "hdfc_netbanking.xls").read_bytes()
     demo = (SAMPLES / "demo_statement.csv").read_text(encoding="utf-8-sig")
     up = lambda data, name, **kw: {"file": base64.b64encode(data).decode(), "filename": name,
                                    "as_of": "2026-04-30", **kw}
@@ -166,6 +177,10 @@ def _requests():
         ("POST", "/api/statement", look(b"Dear diary, nothing to see.\n", "notes.txt")),
         ("POST", "/api/audit", {**up(sbi, "sbi_statement.xlsx", confirmed_rows=[5]),
                                 "as_of": "2026-09-01"}),
+        # laid out like the banks' own downloads, the Delimited one with a comma in a narration
+        ("POST", "/api/statement", look(real_txt, "hdfc_delimited.txt")),
+        ("POST", "/api/audit", {**up(real_txt, "hdfc_delimited.txt"), "as_of": "2026-09-01"}),
+        ("POST", "/api/audit", {**up(real_xls, "hdfc_netbanking.xls"), "as_of": "2026-09-01"}),
         ("POST", "/api/complaint", {**up(sbi, "sbi_statement.xlsx", confirmed_rows=[5, 8],
                                          pairs=[[3, 6]]), "as_of": "2026-09-01", **claim}),
         ("POST", "/api/audit", {"csv": demo, "confirmed": ["444363915096"], "as_of": "2026-07-24"}),

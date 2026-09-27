@@ -46,7 +46,7 @@
    on-time, and I could trust the zero because the detector demonstrably works,
    not because it stayed silent."
 
-10. (2026-07-24) "I resolved a privacy-versus-reach conflict at build time: the
+10. (2026-07-24, superseded by 12 on 2026-09-27) "I resolved a privacy-versus-reach conflict at build time: the
     public demo is the real engine's output frozen into a static page with no
     upload surface at all — provably unable to receive a statement — so the tool
     is both shareable and structurally private, with a test enforcing the
@@ -92,3 +92,17 @@ the multiplication; it's three things around it."
 regimes kept straight, conservative documented judgment calls (D5), self-measured
 accuracy, CI discipline — the working skills of a RegTech/FinCrime analyst. The
 ₹100 is just the excuse to demonstrate them.
+
+12. (2026-09-27) "I made the public demo the product itself: the same Python engine
+    runs in the visitor's browser on WebAssembly, so anyone can audit their own
+    statement with nothing uploaded — the page's content security policy lets it
+    talk only to its own site, so privacy is enforced by the browser, not promised."
+
+13. (2026-09-27) "Before accepting a bank's file I made the reader prove it dropped
+    nothing: any row it can't account for stops the audit and is named, and the
+    parsed rows must reproduce the bank's own running balance. A silently skipped
+    row could be the refund you're owed."
+
+14. (2026-09-27) "I tested against statements built to look like the banks' real
+    downloads, and that caught a bug clean fixtures never would: a comma in HDFC's
+    'NETBANK, MUM' narration shifting every column of the unquoted Delimited export."

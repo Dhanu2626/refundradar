@@ -80,6 +80,12 @@ def _ref_keys(t: Transaction) -> set[str]:
     return {r for r in (t.ref, t.alt_ref) if r}
 
 
+def can_confirm_failed(t: Transaction) -> bool:
+    """A payment the user may say failed: a debit on a channel the 2019
+    circular covers. Its failure can't show on the statement (D6)."""
+    return t.is_debit and bool(t.channel) and t.channel not in UNSUPPORTED_CHANNELS
+
+
 def has_reference(t: Transaction) -> bool:
     """Whether the statement prints any reference for this row."""
     return bool(_ref_keys(t))

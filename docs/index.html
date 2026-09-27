@@ -375,7 +375,7 @@
   .pack { max-height: 520px; overflow: auto; margin-top: 14px; padding: 18px; border-radius: 12px;
           border: 1px solid var(--line); background: var(--bg); color: var(--ink-2);
           font-family: var(--mono); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap;
-          overflow-wrap: anywhere; }
+          overflow-wrap: anywhere; scrollbar-color: var(--line-2) transparent; }
 
   .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px;
           margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line);
@@ -937,6 +937,29 @@ $("download-btn").addEventListener("click", () => {
 // statement chosen here is read in this page and sent nowhere.
 const ENGINE_FILES = ["vendor/xlrd-2.0.2-py2.py3-none-any.whl", "vendor/openpyxl-3.1.5-py2.py3-none-any.whl", "vendor/et_xmlfile-2.0.0-py3-none-any.whl", "vendor/olefile-0.47-py2.py3-none-any.whl", "vendor/pyyaml-6.0.3-pure.zip", "vendor/msoffcrypto_tool-6.0.0-py3-none-any.whl", "engine.zip"];
 let engineReady = false;
+
+// The first visit downloads the Python runtime (the browser keeps it after):
+// count it as it arrives, so a slow connection shows progress, not a stall.
+// Responses pass through unchanged; only their bytes are counted.
+const RUNTIME_BYTES = 13123694;
+let arrived = 0;
+const plainFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await plainFetch(...args);
+  if (engineReady || !res.body || typeof TransformStream !== "function") return res;
+  const counted = res.body.pipeThrough(new TransformStream({
+    transform(chunk, out) { arrived += chunk.byteLength; showArrival(); out.enqueue(chunk); },
+  }));
+  return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
+};
+function showArrival() {
+  if (engineReady) return;
+  const words = `starting… ${Math.min(99, Math.floor(100 * arrived / RUNTIME_BYTES))}% of ` +
+                `${(RUNTIME_BYTES / 1e6).toFixed(1)} MB (first visit only)`;
+  engineState("loading", words);
+  if (document.body.classList.contains("busy")) setStatus(`Starting RefundRadar in your browser: ${words}`);
+}
+
 const runtime = loadPyodide({ indexURL: "pyodide/" });
 const engine = (async () => {
   const py = await runtime;
@@ -970,8 +993,8 @@ async function send(path, body) {
     bridge = await engine;
   } catch (_) {
     document.body.classList.remove("busy");
-    throw new Error("RefundRadar couldn't start in this browser. " +
-                    "Run it on your computer instead: it works the same.");
+    throw new Error("RefundRadar couldn't start in this browser. Update it, or open this page in " +
+                    "a current Chrome, Edge, Firefox or Safari (iPhone: iOS 16.4 or later).");
   }
   if (body !== undefined && body.password) {
     try {

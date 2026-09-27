@@ -307,3 +307,33 @@ def test_a_pdf_is_named_as_a_pdf():
     assert sniff(b"%PDF-1.7\n") == "pdf"
     with pytest.raises(ValueError, match="^This is a PDF"):
         parse_statement_bytes(b"%PDF-1.7\n1 0 obj\n")
+
+
+# --- The command line: confirming by row, and a demo that answers nothing ----
+
+def test_cli_confirms_a_payment_without_a_reference_by_its_row(capsys):
+    from refundradar.__main__ import main
+    assert main(["audit", str(SBI_SAMPLE)]) == 0
+    listed = capsys.readouterr().out
+    assert "transaction 6: 2026-06-14 Rs.5000.00  ATM WDL-ATM CASH" in listed  # offered, as on the web
+    assert "never_refunded" not in listed
+    assert main(["audit", str(SBI_SAMPLE), "--confirm-row", "6"]) == 0
+    out = capsys.readouterr().out
+    assert "[never_refunded] 2026-06-14 Rs.5000.00 (atm)" in out
+    assert "transaction 6:" not in out  # now a finding, no longer offered
+
+
+@pytest.mark.parametrize("row", ["2", "21", "0"])  # has a reference; past the end; before the start
+def test_cli_refuses_a_row_that_isnt_a_payment_without_a_reference(row, capsys):
+    from refundradar.__main__ import main
+    assert main(["audit", str(SBI_SAMPLE), "--confirm-row", row]) == 1
+    assert f"--confirm-row {row}: transaction {row} is not a payment printed without a reference" \
+        in capsys.readouterr().out
+
+
+def test_cli_demo_answers_nothing_for_you(capsys):
+    from refundradar.__main__ import main
+    assert main(["demo"]) == 0
+    out = capsys.readouterr().out
+    assert "never_refunded" not in out and "You confirmed" not in out
+    assert "--confirm <reference>" in out
