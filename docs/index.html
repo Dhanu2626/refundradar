@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0b0d">
-<!-- The public demo page (docs/index.html) is built from this file by
-     tools/build_demo_page.py: it keeps everything here except the blocks between
-     demo-swap markers, which it replaces with versions that take no file. -->
+<!-- The public live demo (docs/index.html) is this page, built by
+     tools/build_demo_page.py. It keeps everything here except the blocks between
+     demo-swap markers: its title, its footer line, and send(), which there hands
+     each request to the app's own routes running in the visitor's browser. -->
 <title>RefundRadar — the payments auditor your bank hopes you never run</title>
-<meta name="description" content="RBI requires your bank to pay you Rs.100/day for late refunds on failed payments, automatically. Almost nobody checks. RefundRadar does.">
+<meta name="description" content="The RefundRadar app, running in your browser: audit a bank statement against RBI's failed-payment rules. Nothing is uploaded.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
 <script>
@@ -325,6 +327,7 @@
                 background: var(--surface); }
   .picks .inc::before, .inc.plain::before { display: none; }
   .narr { font-family: var(--mono); font-size: 12.5px; }
+  .noref { color: var(--muted); font-weight: 500; }
   .empty { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 16px 18px;
            border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: 14px; }
 
@@ -411,7 +414,7 @@
   }
 </style>
 <style>
-  /* the public demo's few rules of its own; everything else is the app's */
+  /* the live demo's few rules of its own; everything else is the app's */
   :root { --demo-bar: #0d1b1b; }
   :root[data-theme="light"] { --demo-bar: #e2f5f1; }
   .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
@@ -420,20 +423,11 @@
   .demo-bar .pill { padding: 2px 9px; border-radius: 999px; background: var(--brand);
                     color: var(--accent-ink); font-size: 11.5px; font-weight: 800;
                     letter-spacing: .06em; text-transform: uppercase; }
-  .demo-bar a, .drop.demo a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .demo-bar a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  #engine-state[data-state="ready"] { color: var(--accent); font-weight: 600; }
+  #engine-state[data-state="failed"] { color: var(--coral-ink); font-weight: 600; }
   .shell { min-height: calc(100vh - 40px); }
   @media (min-width: 1024px) { .side { height: calc(100vh - 40px); } }
-  .drop.demo, .drop.demo:hover { cursor: default; border-style: solid;
-                                 border-color: var(--teal-line); }
-  a.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-             min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2);
-             color: var(--ink); font-size: 14.5px; font-weight: 600; text-decoration: none;
-             transition: background-color .15s, border-color .15s; }
-  a.button:hover { background: var(--surface-2); border-color: var(--line-hover); }
-  .ro-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600;
-              color: var(--ink-2); }
-  .ro { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-2);
-        background: var(--bg); color: var(--ink-2); overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -462,8 +456,10 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
 </svg>
 
-<div class="demo-bar"><span class="pill">Live demo</span><span>Synthetic statement &middot;
-  this page can't take a file &middot; <a href="https://github.com/Dhanu2626/refundradar">Get RefundRadar on GitHub</a></span></div>
+<div class="demo-bar"><span class="pill">Live demo</span><span>RefundRadar runs in
+  this browser: your file is read here and never uploaded &middot;
+  <span id="engine-state" data-state="loading">starting the engine…</span> &middot;
+  <a href="https://github.com/Dhanu2626/refundradar">Get it on GitHub</a></span></div>
 <div class="shell">
   <aside class="side" aria-label="RefundRadar">
     <div class="brand">
@@ -479,11 +475,11 @@
         <div><b>Claim</b><small>Your complaint pack</small></div></li>
     </ol>
     <section class="privacy" aria-labelledby="privacy-h">
-      <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Live demo</h2>
+      <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Private by design</h2>
       <ul>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>A synthetic statement. No real account.</li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>This page can't take a file, and sends nothing anywhere.</li>
-        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>The app itself runs on your own computer.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>No login. No signup.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Your statement never leaves this computer.</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Nothing doubtful is claimed without your answer.</li>
       </ul>
     </section>
     <p class="side-foot">Applies RBI/2019-20/67 as code.</p>
@@ -505,19 +501,23 @@
       <p class="lede">When a digital payment fails, RBI requires your bank to reverse it on time,
         and to pay you compensation for every day it is late.
         <b>RefundRadar finds late refunds, asks about missing ones, and works out what you're owed.</b></p>
-      <div class="drop demo">
-        <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></div>
-        <strong>Run a real audit on a sample statement</strong>
-        <p class="or">It finds the ₹5,200 a bank owes this made-up customer, and shows its work.</p>
-        <div class="formats"><span class="chip">Synthetic data</span>
-          <span class="chip">229 transactions</span><span class="chip">As of 24 Jul 2026</span></div>
-        <p class="note">This page can't take a file: it has no upload, and nothing you do here
-          leaves your browser. To audit your own statement,
-          <a href="https://github.com/Dhanu2626/refundradar#how-it-works">run RefundRadar on your computer</a>.</p>
-        <button type="button" class="primary choose" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Run the demo audit</button>
+      <div class="drop" id="drop">
+        <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
+        <strong>Drop your bank statement here</strong>
+        <p class="or">or choose a file from this computer</p>
+        <div class="formats"><span class="chip">Generic CSV</span><span class="chip">HDFC .csv</span>
+          <span class="chip">HDFC .xls</span><span class="chip">HDFC .xlsx</span>
+          <span class="chip">HDFC Delimited .txt</span></div>
+        <p class="note">Generic CSV needs the columns Date, Narration, Ref, Debit, Credit, Balance.
+          HDFC reading is synthetically tested, not yet verified against a real HDFC export.</p>
+        <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Choose a file</button>
       </div>
-      <noscript><p class="error" style="display:block">This demo needs JavaScript to show the audit.</p></noscript>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
+      <div class="cta">
+        <button type="button" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Try with a demo statement</button>
+        <p>See it work on synthetic data before you use your own statement.</p>
+      </div>
       <div class="features">
         <div class="feature"><span class="fi"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
           <b>Stays on this computer</b><p>No login. No signup. Your statement never leaves this computer.</p></div>
@@ -531,7 +531,7 @@
     <section id="screen-audit" class="hidden" aria-labelledby="audit-h">
       <div class="page-head">
         <div><p class="eyebrow">Audit results</p><h1 id="audit-h">Your refund audit</h1></div>
-        <a class="button ghost" href="https://github.com/Dhanu2626/refundradar#how-it-works">Audit your own statement</a>
+        <button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button>
       </div>
 
       <div class="card" id="statement-card">
@@ -593,9 +593,11 @@
         <div class="sec-head"><h2 id="conf-h"><span class="h-ic tone-ask"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Did a payment fail that never came back?</h2></div>
         <p class="hint">The statement alone can't prove a failure that was never
           reversed &mdash; a failed payment looks identical to a successful one.
-          In the app, you search the payment you remember and confirm it.</p>
-        <p class="verify">This demo confirmed one for you: <b id="demo-confirmed"></b>.
-          It is the &ldquo;Still missing&rdquo; finding above.</p>
+          Search the payment you remember and confirm it.</p>
+        <label class="lbl" for="search">Search your payments</label>
+        <div class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+          <input type="search" id="search" autocomplete="off" placeholder="Amount, name or date, e.g. 2499"></div>
+        <div id="candidates"></div>
       </section>
 
       <section class="card claim" id="claim-card" aria-labelledby="claim-h">
@@ -603,12 +605,13 @@
         <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
           citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
         <div class="fields">
-          <div class="field"><span class="ro-label">Name as on the account</span><div class="ro">A. Sample Customer</div></div>
-          <div class="field"><span class="ro-label">Account last 4 digits</span><div class="ro">2626</div></div>
-          <div class="field"><span class="ro-label">Email or phone for the reply</span><div class="ro">sample@example.com</div></div>
+          <div class="field"><label for="c-name">Name as on the account</label>
+            <input type="text" id="c-name" autocomplete="name" placeholder="A. Sample Customer"></div>
+          <div class="field"><label for="c-last4">Account last 4 digits</label>
+            <input type="text" id="c-last4" maxlength="4" inputmode="numeric" placeholder="1234"></div>
+          <div class="field"><label for="c-contact">Email or phone for the reply</label>
+            <input type="text" id="c-contact" placeholder="you@example.com"></div>
         </div>
-        <p class="hint">The demo fills these in for a sample customer. In the app, you type
-          your own, and they go only into the letter.</p>
         <p class="field-error hidden" id="pack-error" role="alert"></p>
         <div class="row">
           <button class="primary" id="pack-btn"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg>Generate complaint pack</button>
@@ -625,7 +628,7 @@
       </section>
     </section>
 
-    <footer class="foot"><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This demo reads a synthetic statement; the app runs 100% on your computer.</span>
+    <footer class="foot"><span>RefundRadar &mdash; applies RBI/2019-20/67 as code. This live demo runs entirely in your browser.</span>
       <span>Self-help tool, not legal advice &mdash; verify details before submitting any complaint.</span></footer>
   </div>
   </main>
@@ -633,8 +636,8 @@
 
 <script>
 // The view: how a result looks. The public demo page runs this block unchanged.
-const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
-                fileName: "", packText: "" };
+const state = { csv: null, file: null, confirmed: new Set(), confirmedRows: new Set(),
+                pairs: [], fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
 // statement text (narrations, references, file names) is data, never markup
@@ -776,21 +779,24 @@ function render(data) {
 
 function renderCandidates(q) {
   const list = (state.candidates || [])
-    .filter((c) => !state.confirmed.has(c.ref))
+    .filter((c) => c.ref === null ? !state.confirmedRows.has(c.row) : !state.confirmed.has(c.ref))
     .filter((c) => !q || c.narration.toLowerCase().includes(q) ||
                    c.amount.includes(q) || c.date.includes(q))
     .slice(0, 8);
   $("candidates").innerHTML = list.map((c) => {
     const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    // no reference printed: its place on the statement tells it from any look-alike
+    const noRef = c.ref === null ? ` &middot; <span class="noref">no reference &middot; transaction ${c.row + 1}</span>` : "";
     return `<div class="inc plain"><div class="main">
-        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}</div>
+        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}${noRef}</div>
         <div class="sub narr">${esc(c.narration)}</div></div>
-        <div class="act"><button data-ref="${esc(c.ref)}" class="mark-failed ask">This payment failed</button></div></div>`;
+        <div class="act"><button ${c.ref === null ? `data-row="${c.row}"` : `data-ref="${esc(c.ref)}"`} class="mark-failed ask">This payment failed</button></div></div>`;
   }).join("") || `<p class="empty">${q ? `No payment matches &ldquo;${esc(q)}&rdquo;.`
                                        : "Type to search your payments."}</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
     b.addEventListener("click", () => {
-      state.confirmed.add(b.dataset.ref);
+      if (b.dataset.row !== undefined) state.confirmedRows.add(Number(b.dataset.row));
+      else state.confirmed.add(b.dataset.ref);
       $("search").value = "";  // that search is done; the payment is now a finding
       runAudit();
     }));
@@ -834,35 +840,150 @@ $("download-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 </script>
-<script type="application/json" id="demo-data">{"file_name": "demo_statement.csv (synthetic)", "response": {"audit": {"as_of": "2026-07-24", "statement_lines": 229, "total_owed_inr": 5200, "stuck_amount": "2499.00", "on_time_count": 1, "incidents": [{"status": "refunded_on_time", "time_barred": false, "reason": "Failed transaction, reversed within the deadline.", "date": "2026-01-21", "amount": "750.00", "narration": "UPI/DR/822439055664/SWIGGY.ORDER@ICICI/FAILED PAYMENT", "ref": "822439055664", "channel_name": "UPI person-to-merchant", "deadline": "2026-01-26", "refund_date": "2026-01-24", "days_late": 0, "compensation_inr": 0, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5", "txn_id": 27, "action": "none", "refund_id": 33, "candidates": []}, {"status": "refunded_late", "time_barred": false, "reason": "Failed transaction, reversed 8 days past the deadline.", "date": "2026-02-15", "amount": "2000.00", "narration": "UPI/DR/585096075773/PAYTMQR2810050501@PAYTM/GROCERIES", "ref": "585096075773", "channel_name": "UPI person-to-merchant", "deadline": "2026-02-20", "refund_date": "2026-02-28", "days_late": 8, "compensation_inr": 800, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5", "txn_id": 60, "action": "none", "refund_id": 79, "candidates": []}, {"status": "refunded_late", "time_barred": false, "reason": "Failed transaction, reversed 6 days past the deadline.", "date": "2026-03-12", "amount": "5000.00", "narration": "ATW-512967XX1234-S1CN289386157692-BEGUMPET", "ref": "289386157692", "channel_name": "ATM / Micro-ATM cash withdrawal", "deadline": "2026-03-17", "refund_date": "2026-03-23", "days_late": 6, "compensation_inr": 600, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: ATM / Micro-ATM cash withdrawal — reversal by T+5", "txn_id": 99, "action": "none", "refund_id": 111, "candidates": []}, {"status": "excluded_genuine_refund", "time_barred": false, "reason": "Money came back, but the wording says merchant refund (returned order), not a failed-transaction reversal — no compensation applies.", "date": "2026-04-06", "amount": "1299.00", "narration": "UPI/DR/276460218586/MYNTRA.PAYU@AXIS/ORDER 8817", "ref": "276460218586", "channel_name": "UPI person-to-merchant", "deadline": null, "refund_date": "2026-04-16", "days_late": null, "compensation_inr": null, "citation": null, "txn_id": 124, "action": "none", "refund_id": 143, "candidates": []}, {"status": "never_refunded", "time_barred": false, "reason": "You confirmed this payment failed and no refund row exists — compensation accrues every day until reversal.", "date": "2026-06-15", "amount": "2499.00", "narration": "UPI/DR/444363915096/9876543210@OKHDFC/TRANSFER", "ref": "444363915096", "channel_name": "UPI person-to-person", "deadline": "2026-06-16", "refund_date": null, "days_late": 38, "compensation_inr": 3800, "citation": "RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-person — reversal by T+1", "txn_id": 205, "action": "none", "refund_id": null, "candidates": []}]}, "candidates": [], "statement": {"filename": null, "format": "generic", "transactions": 229, "verification": "Generic CSV (Date, Narration, Ref, Debit, Credit, Balance)."}, "summary": {"transactions": 229, "refunds_found": 4, "matched": 4, "needs_confirmation": 0, "unable_to_match": 0}, "unmatched": []}, "pack": "# Complaint pack — generated 2026-07-24 by RefundRadar\n\n## Part 1 — Grievance letter to the bank\n\nTo: The Branch Manager / Grievance Redressal Cell\nFrom: A. Sample Customer (account ending 2626)\nContact: sample@example.com\nDate: 2026-07-24\n\nSubject: Claim of customer compensation for delayed reversal of failed transactions under RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019\n\nDear Sir/Madam,\n\nThe RBI circular cited above harmonises the turn-around time for the reversal of failed transactions and mandates compensation of Rs.100 per day of delay, payable suo moto — without the customer having to ask.\n\nAn audit of my account statement shows the following failed transactions where the mandated deadline was not met:\n\n| # | Date | Channel | Amount (Rs.) | Reference | Reversal deadline | Reversed on | Days late | Compensation due (Rs.) |\n|---|------|---------|--------------|-----------|-------------------|-------------|-----------|------------------------|\n| 1 | 2026-02-15 | UPI person-to-merchant | 2000.00 | 585096075773 | 2026-02-20 | 2026-02-28 | 8 | 800 |\n| 2 | 2026-03-12 | ATM / Micro-ATM cash withdrawal | 5000.00 | 289386157692 | 2026-03-17 | 2026-03-23 | 6 | 600 |\n| 3 | 2026-06-15 | UPI person-to-person | 2499.00 | 444363915096 | 2026-06-16 | NOT YET REVERSED | 38 | 3800 |\n\n**Total compensation due as of 2026-07-24: Rs.5200**, plus Rs.2499.00 of principal still not reversed, with compensation continuing to accrue at Rs.100/day per incident until reversal.\n\nI request that (a) any unreversed principal be credited immediately, and (b) the compensation above be credited to my account within 7 working days, failing which I will escalate to the RBI Ombudsman under the Integrated Ombudsman Scheme, 2021.\n\nYours faithfully,\nA. Sample Customer\n\n## Part 2 — Escalation timeline\n\n- 2026-07-24 — letter submitted to the bank\n- 2026-08-23 — if no satisfactory resolution by this date, the RBI Ombudsman route unlocks\n\n## Part 3 — RBI Ombudsman draft (use only after 30 days or rejection)\n\nFile online at https://cms.rbi.org.in (no fee, no lawyer needed).\n\nSuggested complaint text:\n\n> I hold an account ending 2626. The failed transactions listed in the attached table were not reversed within the TAT mandated by RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, and the compensation of Rs.100/day payable suo moto under the same circular was not credited. I complained to my bank on 2026-07-24 and did not receive resolution within 30 days. I request the reversal of any outstanding principal and payment of compensation totalling Rs.5200 (as of 2026-07-24, still accruing for unreversed items).\n\nAttach: the evidence table above and your account statement for the relevant period.\n\n## Citations\n\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: ATM / Micro-ATM cash withdrawal — reversal by T+5\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-merchant — reversal by T+5\n- RBI/2019-20/67 (DPSS.CO.PD No.629/02.01.014/2019-20) dated 20-09-2019, Annex: UPI person-to-person — reversal by T+1\n\n---\n*Generated by RefundRadar, a self-help tool that applies RBI's published circulars to your own statement. It is not legal advice. Verify the details above against your records before submitting.*", "confirmed": ["444363915096"]}</script>
+<script src="pyodide/pyodide.js"></script>
 <script>
-// The public demo, built by tools/build_demo_page.py: what the app answers for its
-// demo statement, frozen into this page. It has no file input, no form and no
-// network call, so it can never receive a statement.
-const DEMO = JSON.parse($("demo-data").textContent);
+// The live demo answers every request in this browser: RefundRadar's own routes
+// (refundradar/webapp.py) run under Pyodide, loaded from this site, so a
+// statement chosen here is read in this page and sent nowhere.
+const ENGINE_FILES = ["vendor/xlrd-2.0.2-py2.py3-none-any.whl", "vendor/openpyxl-3.1.5-py2.py3-none-any.whl", "vendor/et_xmlfile-2.0.0-py3-none-any.whl", "vendor/olefile-0.47-py2.py3-none-any.whl", "vendor/pyyaml-6.0.3-pure.zip", "engine.zip"];
+let engineReady = false;
+const engine = (async () => {
+  const py = await loadPyodide({ indexURL: "pyodide/" });
+  for (const f of ENGINE_FILES)
+    py.unpackArchive(await (await fetch(f)).arrayBuffer(), "zip", { extractDir: "/engine" });
+  py.runPython("import sys; sys.path.insert(0, '/engine')");
+  return py.pyimport("bridge");
+})();
+engine.then(() => { engineReady = true; engineState("ready", "engine ready"); },
+            () => engineState("failed", "the engine couldn't start in this browser"));
 
-$("demo-btn").addEventListener("click", () => {
+function engineState(state, words) {
+  const el = $("engine-state");
+  el.dataset.state = state;
+  el.textContent = words;
+}
+
+async function send(path, body) {
+  if (!engineReady) {
+    setStatus("Starting the audit engine in your browser…");
+    document.body.classList.add("busy");
+  }
+  let bridge;
+  try {
+    bridge = await engine;
+  } catch (_) {
+    document.body.classList.remove("busy");
+    throw new Error("The audit engine couldn't start in this browser. " +
+                    "Run RefundRadar on your computer instead: it works the same.");
+  }
+  await new Promise((r) => setTimeout(r, 16));  // let "Auditing…" show before the engine works
+  const out = bridge.call(body === undefined ? "GET" : "POST", path,
+                          body === undefined ? "" : JSON.stringify(body));
+  const [status, type, text] = out.toJs();
+  out.destroy();
+  return new Response(text, { status, headers: { "Content-Type": type } });
+}
+</script>
+<script>
+// Reading your file and asking RefundRadar about it.
+
+// the statement as RefundRadar needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], confirmed_rows: [...state.confirmedRows],
+           pairs: state.pairs, ...extra };
+}
+
+async function api(path, body) {
+  const res = await send(path, body);
+  if (!res.ok) {
+    let detail = "Something went wrong.";
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(detail);
+  }
+  return res;
+}
+
+async function runAudit() {
   showError("");
-  state.fileName = DEMO.file_name;
-  render(DEMO.response);
-  const note = $("demo-confirmed");
-  if (note) note.textContent = DEMO.response.audit.incidents
-    .filter((i) => DEMO.confirmed.includes(i.ref))
-    .map((i) => `${i.channel_name} · ${inr(i.amount)} · ${day(i.date)}`).join("; ");
-  setStatus("Audit complete.");
+  setStatus(`Auditing ${state.fileName}…`);
+  document.body.classList.add("busy");
+  try {
+    const res = await api("/api/audit", payload());
+    render(await res.json());
+    setStatus("Audit complete.");
+  } catch (err) {
+    // an unreadable statement gets no result at all, only the reason
+    $("screen-audit").classList.add("hidden");
+    $("screen-drop").classList.remove("hidden");
+    setStage("upload");
+    setStatus(`Could not audit ${state.fileName}. Nothing was claimed.`);
+    showError(err.message);
+    window.scrollTo(0, 0);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+$("search").addEventListener("input", (e) => renderCandidates(e.target.value.trim().toLowerCase()));
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+$("drop").addEventListener("dragleave", () => $("drop").classList.remove("over"));
+$("drop").addEventListener("drop", (e) => {
+  e.preventDefault(); $("drop").classList.remove("over");
+  if (e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+});
+$("file").addEventListener("change", (e) => { if (e.target.files.length) readFile(e.target.files[0]); });
+
+function readFile(f) {
+  showError("");
+  Object.assign(state, { csv: null, file: null, fileName: f.name,
+                         confirmed: new Set(), confirmedRows: new Set(), pairs: [] });
+  setStatus(`Reading ${f.name}…`);
+  const reader = new FileReader();
+  reader.onload = () => { state.file = toBase64(reader.result); runAudit(); };
+  reader.onerror = () => { setStatus(`Could not read ${f.name}.`);
+                           showError("The browser could not read that file."); };
+  reader.readAsArrayBuffer(f);  // .xls and .xlsx are binary: send the bytes as they are
+}
+
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+$("demo-btn").addEventListener("click", async () => {
+  showError("");
+  try {
+    const data = await (await api("/api/demo")).json();
+    Object.assign(state, { csv: data.csv, file: null, pairs: [], confirmedRows: new Set(),
+                           fileName: "demo_statement.csv (synthetic)",
+                           confirmed: new Set(data.suggested_confirmed) });
+    runAudit();
+  } catch (err) { showError(err.message); }
 });
 
-$("pack-btn").addEventListener("click", () => { showError(""); showPack(DEMO.pack); });
+$("pack-btn").addEventListener("click", async () => {
+  showError(""); packError("");
+  const name = $("c-name").value.trim(), last4 = $("c-last4").value.trim(),
+        contact = $("c-contact").value.trim();
+  if (!name || !last4 || !contact) { packError("Fill the three details for the letter first."); return; }
+  document.body.classList.add("busy");
+  try {
+    const res = await api("/api/complaint",
+                          payload({ name, account_last4: last4, contact }));
+    showPack(await res.text());
+  } catch (err) { packError(err.message); }
+  finally { document.body.classList.remove("busy"); }
+});
+
 $("reset-btn").addEventListener("click", () => location.reload());
-
-// a file dropped here is never read: say so, rather than let the browser open it
-document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => {
-  e.preventDefault();
-  showError("This live demo can't take a file, and it didn't read that one. " +
-            "To audit your own statement, run RefundRadar on your computer.");
-  window.scrollTo(0, 0);
-});
+$("new-btn").addEventListener("click", () => location.reload());
 </script>
 </body>
 </html>

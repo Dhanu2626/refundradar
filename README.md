@@ -2,12 +2,12 @@
 
 ![Part of Dhanush Labs](https://img.shields.io/badge/PART_OF-DHANUSH_LABS-6366F1?style=flat-square&labelColor=0A0B0D)
 ![Status](https://img.shields.io/badge/STATUS-V0.9_BETA-14B8A6?style=flat-square&labelColor=0A0B0D)
-![Tests](https://img.shields.io/badge/TESTS-210_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
+![Tests](https://img.shields.io/badge/TESTS-231_PASSING-14B8A6?style=flat-square&labelColor=0A0B0D)
 ![License](https://img.shields.io/badge/LICENSE-MIT-6366F1?style=flat-square&labelColor=0A0B0D)
 
 ### The Payments Auditor Your Bank Hopes You Never Run
 
-**[▶ Try the live demo →](https://dhanu2626.github.io/refundradar/)** — a real audit of a synthetic statement. No install, no signup. The demo page cannot receive a file.
+**[▶ Try the live demo →](https://dhanu2626.github.io/refundradar/)** — the RefundRadar app itself, running in your browser: try the synthetic statement or your own export. No install, no signup, nothing uploaded.
 
 ---
 
@@ -55,7 +55,12 @@ Open `http://127.0.0.1:8626` → drop a generic CSV or an HDFC export (`.csv`, `
 
 ## Interactive Demo
 
-**[dhanu2626.github.io/refundradar](https://dhanu2626.github.io/refundradar/)** — runs entirely against a synthetic statement; there is no upload endpoint on the demo build, so no file you provide can leave your browser.
+**[dhanu2626.github.io/refundradar](https://dhanu2626.github.io/refundradar/)** is the app you run locally, not a copy: the same page, and the same Python code (`refundradar/`) running in your browser on [Pyodide](https://pyodide.org), which the site serves itself. Drop a statement, answer its questions, generate the letter.
+
+- **Nothing is uploaded.** Your file is read inside the page. There is no server behind it, and the page's Content-Security-Policy lets it connect only to its own site, so the browser itself refuses to send anything elsewhere.
+- **The first visit downloads about 14 MB** (the Python runtime), cached after that. Audits then run on your device.
+- **HDFC reading is synthetically tested**, not yet verified against a real HDFC export, and the page says so beside every HDFC result.
+- **Run the demo locally:** `python tools/build_demo_page.py`, then `python -m http.server -d docs 8000` and open `http://localhost:8000` (it needs http, not a `file://` path).
 
 ## Engineering Decisions
 
@@ -67,6 +72,7 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 | NEFT excluded | Falls under a different regime (penal interest at repo + 2%) |
 | Ambiguous UPI defaults to the longer deadline | Keeps the claim undisputable |
 | Inferred reversals never auto-claimed | User confirms first, even when detectable from amount/timing |
+| Payments with no reference are confirmed by their row | The statement prints nothing to confirm by; none is invented, and the letter says "not printed on statement" |
 
 > [!WARNING]
 > This is a self-help tool applying published RBI circulars to your own statement. It is **not legal advice** — verify every figure before submitting a complaint.
@@ -77,7 +83,7 @@ Every judgment call is written down with reasoning and residual risk in `rules/D
 refundradar/
 ├── refundradar/           parsing, reconciliation, RBI rule engine, complaint generator
 ├── rules/DECISIONS.md     every judgment call, written down
-├── tests/                 210 tests incl. planted-ground-truth reconciliation exam
+├── tests/                 231 tests incl. planted-ground-truth reconciliation exam
 └── CONTRIBUTING.md        how to add a bank parser
 ```
 
@@ -95,7 +101,7 @@ Python · pandas (statement parsing) · pytest
 | Other banks | 🚧 in progress |
 | PDF statements | 🚧 planned |
 
-210 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
+231 tests passing, including a planted-ground-truth exam the reconciler must pass (find every failure, fall for no traps), plus a live field test on a real SBI statement.
 
 ## Future Improvements
 

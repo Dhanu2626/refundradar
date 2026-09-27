@@ -21,7 +21,7 @@ from refundradar.complaint import generate_complaint_pack
 from refundradar.formats import EncryptedStatement
 from refundradar.model import UNSUPPORTED_CHANNELS, Transaction
 from refundradar.parser import parse_generic_csv_text, parse_statement_bytes
-from refundradar.reconcile import CONFIRM, refund_like, unmatched_refunds
+from refundradar.reconcile import CONFIRM, has_reference, refund_like, unmatched_refunds
 from refundradar.rules_engine import load_rules
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples"
@@ -48,6 +48,7 @@ class AuditRequest(BaseModel):
     file: str | None = None       # any supported statement file's bytes, base64
     filename: str | None = None
     confirmed: list[str] = []
+    confirmed_rows: list[int] = []  # payments printed without a reference, by row (D14)
     pairs: list[tuple[int, int]] = []  # (payment, refund) the user matched by hand
     as_of: str | None = None
 
@@ -120,11 +121,35 @@ def _chosen_refunds(req: AuditRequest, txns: list[Transaction]) -> list[tuple]:
     return chosen
 
 
+def _confirmable(t: Transaction) -> bool:
+    """A payment the user may say failed: a debit on a channel the 2019
+    circular covers. Its failure can't show on the statement (D6)."""
+    return t.is_debit and bool(t.channel) and t.channel not in UNSUPPORTED_CHANNELS
+
+
+def _confirmed_rows(req: AuditRequest, txns: list[Transaction]) -> list[Transaction]:
+    """The payments without a reference the user said failed, by their row
+    on this statement (D14). A payment with a reference is confirmed by it."""
+    if len(set(req.confirmed_rows)) < len(req.confirmed_rows):
+        raise HTTPException(status_code=400, detail="Each payment can be confirmed only once.")
+    chosen = []
+    for n in req.confirmed_rows:
+        t = txns[n] if 0 <= n < len(txns) else None
+        if t is None or has_reference(t) or not _confirmable(t):
+            raise HTTPException(
+                status_code=400,
+                detail="A payment you confirmed doesn't fit this statement. "
+                       "Start over and confirm it again.")
+        chosen.append(t)
+    return chosen
+
+
 def _audit(req: AuditRequest):
     txns = _transactions(req)
     as_of = date.fromisoformat(req.as_of) if req.as_of else None
     return txns, build_audit(txns, set(req.confirmed), as_of=as_of,
-                             confirmed_refunds=_chosen_refunds(req, txns))
+                             confirmed_refunds=_chosen_refunds(req, txns),
+                             confirmed_failed_txns=_confirmed_rows(req, txns))
 
 
 def _row(t: Transaction, ids: dict) -> dict:
@@ -182,16 +207,20 @@ def audit_endpoint(req: AuditRequest) -> dict:
              | {id(c) for c, _ in loose})
     asked = sum(d["action"] in ("confirm_failed", "confirm_refund") for d in audit["incidents"])
     flagged = {i.txn.ref for i in a.incidents}
+    findings = {id(i.txn) for i in a.incidents}
+    # offered to confirm: a payment by its reference, or, when the statement
+    # prints none, by its row (D14)
     candidates = [
         {
             "ref": t.ref,
+            "row": ids[id(t)],
             "date": t.txn_date.isoformat(),
             "amount": str(t.amount),
             "narration": t.narration,
         }
         for t in txns
-        if t.is_debit and t.ref and t.ref not in flagged
-        and t.channel and t.channel not in UNSUPPORTED_CHANNELS
+        if _confirmable(t) and (t.ref not in flagged if t.ref
+                                else not has_reference(t) and id(t) not in findings)
     ]
     fmt = txns[0].bank if txns else "generic"
     return {

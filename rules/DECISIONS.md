@@ -70,7 +70,8 @@ reconciliation finds counterparty signals that raise confidence.
 own. A failed payment that was never reversed is statistically identical, on the
 statement, to a successful payment. Claiming one without evidence would be a guess
 dressed as an audit. The UI therefore asks the user to search and confirm the
-payment they know failed; only confirmed refs enter the claim.
+payment they know failed; only confirmed payments enter the claim, confirmed by their
+reference, or by their row when the statement prints none (D14).
 
 **Why:** every claim in the complaint letter must survive the bank's scrutiny. One
 fabricated incident poisons the credibility of all the real ones.
@@ -242,3 +243,60 @@ It overstates only if the user picks a refund for a payment that did not fail, w
 is outside what a statement can catch (as in D6). The UI offers only candidates the
 reconciler computed; the API re-checks the structure but not the candidate list, so a
 hand-built request is trusted like any confirmation.
+
+## D14 — A payment printed without a reference is confirmed by its row (2026-09-27)
+
+**Decision:** a debit the statement prints with no reference at all (an ATM cash
+withdrawal, some PoS card payments, an ACH debit) can be confirmed as failed by its
+row: its position among the statement's transactions, the same row identity the web
+app already uses to pick refunds (D13). The API takes it as `confirmed_rows` and
+accepts only a debit with no reference, on a channel the 2019 circular covers, each
+row once; anything else is refused whole. The reconciler then treats that payment
+exactly like one confirmed by its reference: a single later reversal settles it,
+competing credits are asked about, and none means never refunded. The letter prints
+"not printed on statement" in the Reference column.
+
+**Why:** confirmation was keyed by reference, so these payments could never be
+offered or claimed, although ATM cash not dispensed and a PoS charge without a slip
+are scenarios the circular covers (4 of 13 debits in the synthetic HDFC sample, 21 of
+219 in the demo). A reference made up to fill the gap would be a claim the bank could
+reject on sight; the row names the payment without inventing anything.
+
+**Risk:** a row number means something only for the file it came from. The browser
+re-sends the same file with every answer and a new file clears every confirmation, so
+a row is never read against another statement. Two payments alike in every printed
+detail are told apart only by their row, which the UI shows as "transaction N".
+Nothing changes for payments with a reference, and nothing is confirmed without the
+user saying so (D6).
+
+## D15 — The live demo is the app, run in the visitor's browser (2026-09-27)
+
+**Decision:** the public demo (docs/, GitHub Pages) is the web app itself. Its page is
+refundradar/static/index.html with three blocks swapped: the title, a footer line, and
+`send()`, which hands each request to the app's own routes (refundradar/webapp.py)
+running under Pyodide in the browser instead of on a server. The runtime, the
+pure-Python spreadsheet readers and PyYAML's pure-Python half are vendored under docs/
+and pinned by SHA-256, so the page loads nothing from any other site. Two small
+stand-ins let webapp.py import without FastAPI or pydantic (tools/demo_engine/). This
+replaces the 2026-07-24 demo, a static page with one frozen audit and no way to take a
+file.
+
+**Why:** the frozen page showed a picture of one result, not the product: no upload, no
+questions, no letter from your own answers, and it drifted from the app with every
+change. Running the app's own code keeps one code path, and the demo now proves the
+thing the product promises: a statement can be audited without leaving the device.
+
+**Evidence status:** CI runs the demo's engine in an isolated interpreter that can
+reach only the files the demo ships, and requires every answer, from uploads in all
+four formats to refusals, to equal the app's (tests/test_demo_page.py). Browser runs
+from the README link, desktop and 390px: the uploads, both kinds of confirmation and
+the letter match the local app, and no request leaves the site. *Not verified:* the
+live GitHub Pages site itself, which this sandbox cannot reach (its MIME types for
+.mjs and .wasm are assumed from Pages' defaults).
+
+**Risk:** the demo page can now read a file, so the guarantee moved from "cannot
+receive" to "cannot send": the Content-Security-Policy allows connections only to the
+site itself and forbids form submission, and the browser enforces that whatever a
+script tries. The first visit costs about 14 MB. The vendored runtime is trusted as
+pinned; upgrading it means fetching and re-pinning it (build_demo_page.py
+--fetch-runtime).

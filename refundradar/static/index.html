@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0b0d">
-<!-- The public demo page (docs/index.html) is built from this file by
-     tools/build_demo_page.py: it keeps everything here except the blocks between
-     demo-swap markers, which it replaces with versions that take no file. -->
+<!-- The public live demo (docs/index.html) is this page, built by
+     tools/build_demo_page.py. It keeps everything here except the blocks between
+     demo-swap markers: its title, its footer line, and send(), which there hands
+     each request to the app's own routes running in the visitor's browser. -->
 <!-- demo-swap:title --><title>RefundRadar</title><!-- /demo-swap:title -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cg fill='none' stroke='%2304201c' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='4.5'/%3E%3Cpath d='M16 16l6.5-6.5'/%3E%3C/g%3E%3C/svg%3E">
 <!-- Icons adapted from Lucide (lucide.dev), ISC License. Nothing on this page loads from the network. -->
@@ -324,6 +325,7 @@
                 background: var(--surface); }
   .picks .inc::before, .inc.plain::before { display: none; }
   .narr { font-family: var(--mono); font-size: 12.5px; }
+  .noref { color: var(--muted); font-weight: 500; }
   .empty { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 16px 18px;
            border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: 14px; }
 
@@ -450,7 +452,6 @@
       <li><span class="dot"><span>3</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>
         <div><b>Claim</b><small>Your complaint pack</small></div></li>
     </ol>
-    <!-- demo-swap:privacy -->
     <section class="privacy" aria-labelledby="privacy-h">
       <h2 id="privacy-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Private by design</h2>
       <ul>
@@ -459,7 +460,6 @@
         <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Nothing doubtful is claimed without your answer.</li>
       </ul>
     </section>
-    <!-- /demo-swap:privacy -->
     <p class="side-foot">Applies RBI/2019-20/67 as code.</p>
   </aside>
 
@@ -479,7 +479,6 @@
       <p class="lede">When a digital payment fails, RBI requires your bank to reverse it on time,
         and to pay you compensation for every day it is late.
         <b>RefundRadar finds late refunds, asks about missing ones, and works out what you're owed.</b></p>
-      <!-- demo-swap:doorway -->
       <div class="drop" id="drop">
         <div class="up"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
         <strong>Drop your bank statement here</strong>
@@ -497,7 +496,6 @@
         <button type="button" id="demo-btn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Try with a demo statement</button>
         <p>See it work on synthetic data before you use your own statement.</p>
       </div>
-      <!-- /demo-swap:doorway -->
       <div class="features">
         <div class="feature"><span class="fi"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span>
           <b>Stays on this computer</b><p>No login. No signup. Your statement never leaves this computer.</p></div>
@@ -511,7 +509,7 @@
     <section id="screen-audit" class="hidden" aria-labelledby="audit-h">
       <div class="page-head">
         <div><p class="eyebrow">Audit results</p><h1 id="audit-h">Your refund audit</h1></div>
-        <!-- demo-swap:new --><button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button><!-- /demo-swap:new -->
+        <button type="button" class="ghost" id="new-btn"><svg class="ic" aria-hidden="true"><use href="#i-rotate"/></svg>Audit another statement</button>
       </div>
 
       <div class="card" id="statement-card">
@@ -571,7 +569,6 @@
 
       <section class="card" id="confirm-card" aria-labelledby="conf-h">
         <div class="sec-head"><h2 id="conf-h"><span class="h-ic tone-ask"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>Did a payment fail that never came back?</h2></div>
-        <!-- demo-swap:confirm -->
         <p class="hint">The statement alone can't prove a failure that was never
           reversed &mdash; a failed payment looks identical to a successful one.
           Search the payment you remember and confirm it.</p>
@@ -579,14 +576,12 @@
         <div class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
           <input type="search" id="search" autocomplete="off" placeholder="Amount, name or date, e.g. 2499"></div>
         <div id="candidates"></div>
-        <!-- /demo-swap:confirm -->
       </section>
 
       <section class="card claim" id="claim-card" aria-labelledby="claim-h">
         <div class="sec-head"><h2 id="claim-h"><span class="h-ic tone-brand"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg></span>Generate the complaint pack</h2></div>
         <p class="hint">Letter to the bank &middot; evidence table &middot; RBI clause
           citations &middot; ombudsman draft if 30 days pass. Three details go on the letter:</p>
-        <!-- demo-swap:fields -->
         <div class="fields">
           <div class="field"><label for="c-name">Name as on the account</label>
             <input type="text" id="c-name" autocomplete="name" placeholder="A. Sample Customer"></div>
@@ -595,7 +590,6 @@
           <div class="field"><label for="c-contact">Email or phone for the reply</label>
             <input type="text" id="c-contact" placeholder="you@example.com"></div>
         </div>
-        <!-- /demo-swap:fields -->
         <p class="field-error hidden" id="pack-error" role="alert"></p>
         <div class="row">
           <button class="primary" id="pack-btn"><svg class="ic" aria-hidden="true"><use href="#i-letter"/></svg>Generate complaint pack</button>
@@ -620,8 +614,8 @@
 
 <script>
 // The view: how a result looks. The public demo page runs this block unchanged.
-const state = { csv: null, file: null, confirmed: new Set(), pairs: [],
-                fileName: "", packText: "" };
+const state = { csv: null, file: null, confirmed: new Set(), confirmedRows: new Set(),
+                pairs: [], fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
 // statement text (narrations, references, file names) is data, never markup
@@ -763,21 +757,24 @@ function render(data) {
 
 function renderCandidates(q) {
   const list = (state.candidates || [])
-    .filter((c) => !state.confirmed.has(c.ref))
+    .filter((c) => c.ref === null ? !state.confirmedRows.has(c.row) : !state.confirmed.has(c.ref))
     .filter((c) => !q || c.narration.toLowerCase().includes(q) ||
                    c.amount.includes(q) || c.date.includes(q))
     .slice(0, 8);
   $("candidates").innerHTML = list.map((c) => {
     const when = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    // no reference printed: its place on the statement tells it from any look-alike
+    const noRef = c.ref === null ? ` &middot; <span class="noref">no reference &middot; transaction ${c.row + 1}</span>` : "";
     return `<div class="inc plain"><div class="main">
-        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}</div>
+        <div class="title"><span class="amt">${inr(c.amount)}</span> &middot; ${when}${noRef}</div>
         <div class="sub narr">${esc(c.narration)}</div></div>
-        <div class="act"><button data-ref="${esc(c.ref)}" class="mark-failed ask">This payment failed</button></div></div>`;
+        <div class="act"><button ${c.ref === null ? `data-row="${c.row}"` : `data-ref="${esc(c.ref)}"`} class="mark-failed ask">This payment failed</button></div></div>`;
   }).join("") || `<p class="empty">${q ? `No payment matches &ldquo;${esc(q)}&rdquo;.`
                                        : "Type to search your payments."}</p>`;
   document.querySelectorAll(".mark-failed").forEach((b) =>
     b.addEventListener("click", () => {
-      state.confirmed.add(b.dataset.ref);
+      if (b.dataset.row !== undefined) state.confirmedRows.add(Number(b.dataset.row));
+      else state.confirmed.add(b.dataset.ref);
       $("search").value = "";  // that search is done; the payment is now a finding
       runAudit();
     }));
@@ -821,22 +818,30 @@ $("download-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 </script>
-<!-- demo-swap:io -->
+<!-- demo-swap:transport -->
 <script>
-// Reading your file and asking the local server; the public demo page has neither.
-
-// the statement as the server needs it: CSV text, or the file's own bytes
-function payload(extra) {
-  const src = state.file !== null ? { file: state.file, filename: state.fileName }
-                                  : { csv: state.csv };
-  return { ...src, confirmed: [...state.confirmed], pairs: state.pairs, ...extra };
-}
-
-async function api(path, body) {
-  const res = await fetch(path, body === undefined ? {} : {
+// How a request reaches RefundRadar: here, the local server.
+function send(path, body) {
+  return fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+</script>
+<!-- /demo-swap:transport -->
+<script>
+// Reading your file and asking RefundRadar about it.
+
+// the statement as RefundRadar needs it: CSV text, or the file's own bytes
+function payload(extra) {
+  const src = state.file !== null ? { file: state.file, filename: state.fileName }
+                                  : { csv: state.csv };
+  return { ...src, confirmed: [...state.confirmed], confirmed_rows: [...state.confirmedRows],
+           pairs: state.pairs, ...extra };
+}
+
+async function api(path, body) {
+  const res = await send(path, body);
   if (!res.ok) {
     let detail = "Something went wrong.";
     try { detail = (await res.json()).detail || detail; } catch (_) {}
@@ -880,7 +885,7 @@ $("file").addEventListener("change", (e) => { if (e.target.files.length) readFil
 function readFile(f) {
   showError("");
   Object.assign(state, { csv: null, file: null, fileName: f.name,
-                         confirmed: new Set(), pairs: [] });
+                         confirmed: new Set(), confirmedRows: new Set(), pairs: [] });
   setStatus(`Reading ${f.name}…`);
   const reader = new FileReader();
   reader.onload = () => { state.file = toBase64(reader.result); runAudit(); };
@@ -901,7 +906,7 @@ $("demo-btn").addEventListener("click", async () => {
   showError("");
   try {
     const data = await (await api("/api/demo")).json();
-    Object.assign(state, { csv: data.csv, file: null, pairs: [],
+    Object.assign(state, { csv: data.csv, file: null, pairs: [], confirmedRows: new Set(),
                            fileName: "demo_statement.csv (synthetic)",
                            confirmed: new Set(data.suggested_confirmed) });
     runAudit();
@@ -925,6 +930,5 @@ $("pack-btn").addEventListener("click", async () => {
 $("reset-btn").addEventListener("click", () => location.reload());
 $("new-btn").addEventListener("click", () => location.reload());
 </script>
-<!-- /demo-swap:io -->
 </body>
 </html>

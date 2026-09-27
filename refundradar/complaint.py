@@ -13,6 +13,11 @@ from refundradar.rules_engine import CIRCULAR
 OMBUDSMAN_PORTAL = "https://cms.rbi.org.in"
 
 
+def _reference(t) -> str:
+    """The payment's reference as the statement prints it; none is made up."""
+    return t.ref or "not printed on statement"
+
+
 def generate_complaint_pack(
     audit: Audit,
     customer_name: str,
@@ -56,7 +61,7 @@ def generate_complaint_pack(
         reversed_on = i.refund_date.isoformat() if i.refund_date else "NOT YET REVERSED"
         lines.append(
             f"| {n} | {i.txn.txn_date.isoformat()} | {r.channel_name} | "
-            f"{i.txn.amount} | {i.txn.ref} | {r.deadline.isoformat()} | "
+            f"{i.txn.amount} | {_reference(i.txn)} | {r.deadline.isoformat()} | "
             f"{reversed_on} | {r.days_late} | {r.compensation_inr} |"
         )
 
@@ -118,7 +123,7 @@ def generate_complaint_pack(
             "",
         ] + [
             f"- {i.txn.txn_date.isoformat()} · Rs.{i.txn.amount} · ref "
-            f"{i.txn.ref} · would-be compensation Rs.{i.ruling.compensation_inr}"
+            f"{_reference(i.txn)} · would-be compensation Rs.{i.ruling.compensation_inr}"
             for i in barred
         ]
 
