@@ -691,7 +691,9 @@
 const state = { csv: null, file: null, confirmed: new Set(), confirmedRows: new Set(),
                 pairs: [], fileName: "", packText: "" };
 const $ = (id) => document.getElementById(id);
-const inr = (n) => "₹" + Number(n).toLocaleString("en-IN");
+// paise whenever there are any (₹1,675.30, never ₹1,675.3); none on a whole-rupee amount (₹16,000)
+const inr = (n) => "₹" + Number(n).toLocaleString("en-IN",
+  { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 });
 // statement text (narrations, references, file names) is data, never markup
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

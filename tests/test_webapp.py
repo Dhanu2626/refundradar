@@ -2,6 +2,8 @@
 
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -382,6 +384,19 @@ def test_index_accepts_statement_files_and_says_what_is_unverified():
     assert set(accept.split(",")) == {".csv", ".xls", ".xlsx", ".txt", ".pdf"}
     assert "Unable to conclusively match" in html
     assert "synthetically tested" in html
+
+
+def test_amounts_keep_their_paise_and_whole_rupees_show_none():
+    # the page's own formatter, run as a browser runs it: ₹1,675.30, never ₹1,675.3
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("runs the page's JavaScript with Node.js")
+    inr = re.search(r"const inr = \(n\) =>.*?;\n", client.get("/").text, re.S).group(0)
+    amounts = ["1675.30", "5.90", "0.50", "123456.70", "16000.00", "412.00", 400, 0, "0"]
+    run = subprocess.run([node, "-e", f"{inr}console.log(JSON.stringify({json.dumps(amounts)}.map(inr)))"],
+                         capture_output=True, text=True, encoding="utf-8", check=True)
+    assert json.loads(run.stdout) == ["₹1,675.30", "₹5.90", "₹0.50", "₹1,23,456.70", "₹16,000", "₹412",
+                                      "₹400", "₹0", "₹0"]
 
 
 def test_never_reversed_payment_is_offered_then_claimed_only_once_confirmed():
