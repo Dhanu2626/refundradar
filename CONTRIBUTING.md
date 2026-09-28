@@ -23,7 +23,11 @@ fake references) and test against that. Real data stays on your machine, always.
    below preamble rows, both text and serial dates, comma-formatted amounts, and any
    reversal wording the bank uses. Then build a whole synthetic download in the bank's
    real layout, as `tools/make_realistic_statements.py` does for SBI and HDFC: that is
-   what caught HDFC's unquoted comma.
+   what caught HDFC's unquoted comma. For the bank's PDF, draw the same statement with
+   its `_pdf` (reportlab, and pypdf for a locked copy); the PDF reader
+   (`refundradar/pdftable.py`, D18) finds the table by the same header names, and it must
+   read the PDF exactly as the spreadsheet, or refuse it by page. If the bank's report
+   writer draws tables some other way, add that way to `LAYOUTS` there.
 4. Check whether the bank ties a reversal to the original payment by reference. Some (SBI)
    issue reversals under a **fresh** reference — if so, the amount+timing fallback in
    [`refundradar/reconcile.py`](refundradar/reconcile.py) is what catches it.
@@ -35,8 +39,10 @@ fake references) and test against that. Real data stays on your machine, always.
    anything in `refundradar/`, also run `python tools/build_demo_page.py`: `docs/` is the
    live demo (the app's own page and code, run in the browser), and a test fails while it
    is out of date. The runtime under `docs/pyodide/` and `docs/vendor/` is pinned by
-   SHA-256; `--fetch-runtime` downloads it again (npm, PyPI, and the 340 MB Pyodide
-   release for the `cryptography` build that opens locked files) and checks every digest.
+   SHA-256; `--fetch-runtime` downloads what is missing again (npm, PyPI, and the 340 MB
+   Pyodide release for the `cryptography` build that opens locked files and the
+   `charset-normalizer` build the PDF reader imports) and checks every digest.
+   pdfminer.six is PyPI's wheel without `pdfminer/cmap/`, rebuilt the same bytes anywhere.
 
 ## Ground rules
 

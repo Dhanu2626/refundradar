@@ -106,3 +106,9 @@ accuracy, CI discipline — the working skills of a RegTech/FinCrime analyst. Th
 14. (2026-09-27) "I tested against statements built to look like the banks' real
     downloads, and that caught a bug clean fixtures never would: a comma in HDFC's
     'NETBANK, MUM' narration shifting every column of the unquoted Delimited export."
+
+15. (2026-09-27) "Bank statement PDFs have no rows, only characters placed on a page. I
+    rebuilt the table from where the text sits, then read it with the same strict
+    parser as the spreadsheets, so a mis-read amount still breaks the bank's own
+    running balance — and where a line can't be placed with certainty, it stops
+    instead of guessing."

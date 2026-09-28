@@ -434,10 +434,21 @@ def _parse_bank_rows(rows: list[list]) -> list[Transaction]:
     return parse_sbi_rows(rows)
 
 
+def parse_rows(rows: list[list]) -> list[Transaction]:
+    """Read a statement's rows. Rows rebuilt from a PDF have no row numbers
+    to show, so a refusal names the page and row instead ("Page 2, row 7")."""
+    try:
+        return _parse_bank_rows(rows)
+    except ValueError as e:
+        if not hasattr(rows, "explain"):
+            raise
+        raise ValueError(rows.explain(str(e))) from None
+
+
 def parse_statement_file(
     path: str | Path, password: str | None = None
 ) -> list[Transaction]:
-    """Open any supported statement file: CSV, xlsx, xls, or encrypted."""
+    """Open any supported statement file: CSV, xlsx, xls, PDF, or encrypted."""
     return parse_statement_bytes(Path(path).read_bytes(), password=password)
 
 
@@ -454,4 +465,4 @@ def parse_statement_bytes(
         except ValueError:
             rows = list(csv.reader(io.StringIO(text)))
             return _parse_bank_rows(rows)
-    return _parse_bank_rows(load_rows(data, password=password))
+    return parse_rows(load_rows(data, password=password))

@@ -25,8 +25,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 import make_realistic_statements as mk  # noqa: E402
 
 AS_OF = date(2026, 9, 1)
-HDFC = ["hdfc_netbanking.xls", "hdfc_netbanking_saved_as.csv", "hdfc_delimited.txt"]
-SBI = ["sbi_account_statement.xlsx", "sbi_account_statement_locked.xlsx", "sbi_details_layout.xlsx"]
+HDFC = ["hdfc_netbanking.xls", "hdfc_netbanking_saved_as.csv", "hdfc_delimited.txt",
+        "hdfc_netbanking.pdf"]
+SBI = ["sbi_account_statement.xlsx", "sbi_account_statement_locked.xlsx", "sbi_details_layout.xlsx",
+       "sbi_account_statement.pdf", "sbi_account_statement_locked.pdf"]
 
 
 def read(name):

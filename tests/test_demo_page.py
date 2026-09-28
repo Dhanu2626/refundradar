@@ -12,6 +12,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import shutil
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -19,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import build_demo_page as bd
+from refundradar import pdftable
 from refundradar.webapp import INDEX, app
 
 DOCS = ROOT / "docs"
@@ -39,7 +42,7 @@ def test_the_demo_page_is_the_apps_own_page():
     shared = re.findall(r"<script>.*?</script>", bd.SWAP.sub("", app_page), re.S)
     assert len(shared) == 3  # the theme, the view, and reading a file and asking about it
     assert style in PAGE and all(s in PAGE for s in shared)
-    for control in ('<input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>',
+    for control in ('<input type="file" id="file" accept=".csv,.xls,.xlsx,.txt,.pdf" hidden>',
                     'id="drop"', 'id="demo-btn"', 'id="search"', 'id="c-name"',
                     'data-theme-choice="light"'):
         assert control in PAGE, control
@@ -101,6 +104,25 @@ def test_what_opens_locked_files_is_pyodides_own_build_fetched_only_when_needed(
     assert 'py.loadPackage("cryptography")' in PAGE and "body.password" in PAGE
 
 
+def test_what_reads_a_pdf_is_pinned_and_fetched_only_when_a_pdf_is_chosen():
+    lock = json.loads((DOCS / "pyodide" / "pyodide-lock.json").read_text())["packages"]
+    for name in bd.READ_PDF:
+        assert bd.RUNTIME[f"pyodide/{lock[name]['file_name']}"] == lock[name]["sha256"], name
+    # pdfminer.six as PyPI publishes it, minus its CJK font tables
+    path, project, version = bd.PDF_READER
+    names = zipfile.ZipFile(DOCS / path).namelist()
+    assert f"pdfminer_six-{version}.dist-info/licenses/LICENSE" in names
+    assert "pdfminer/pdfdocument.py" in names and not any("/cmap/" in n for n in names)
+    meta = zipfile.ZipFile(DOCS / path).read(f"pdfminer_six-{version}.dist-info/METADATA").decode()
+    assert f"\nVersion: {version}\n" in meta
+    startup = re.search(r"const ENGINE_FILES = \[(.*?)\];", PAGE).group(1)
+    assert "pdfminer" not in startup and "charset" not in startup
+    assert f'const PDF_READER = "{path}";' in PAGE
+    assert 'py.loadPackage(["cryptography", "charset-normalizer"])' in PAGE
+    assert "isPdf(body.file)" in PAGE and "await unpack(py, PDF_READER);" in PAGE
+    assert f"Loading the PDF reader: {bd.pdf_bytes() / 1e6:.1f} MB" in PAGE
+
+
 def test_the_first_visit_counts_what_it_downloads():
     # the counter's total is exactly what the page fetches before it can read a file
     assert f"const RUNTIME_BYTES = {bd.runtime_bytes()};" in PAGE
@@ -121,12 +143,16 @@ def test_the_page_presents_the_product_not_a_tour():
 DRIVER = """
 import json, sys
 sys.path.insert(0, sys.argv[1])
+sys.path.append(sys.argv[2])
 assert not any("-packages" in p for p in sys.path), sys.path  # nothing installed is reachable
 import bridge, fastapi, pydantic, yaml
 assert all(m.__file__.startswith(sys.argv[1]) for m in (bridge, fastapi, pydantic, yaml))
 # as the page sends them: the body as JSON text, none for a GET
 print(json.dumps([bridge.call(m, p, "" if b is None else json.dumps(b))
                   for m, p, b in json.loads(sys.stdin.read())]))
+import charset_normalizer, cryptography, pdfminer
+assert all(m.__file__.startswith(sys.argv[1]) for m in (pdfminer, charset_normalizer))
+assert cryptography.__file__.startswith(sys.argv[2])
 """
 DELIMITED = (
     " Date     ,Narration                                                       "
@@ -161,6 +187,10 @@ def _requests():
     sbi = (SAMPLES / "sbi_statement.xlsx").read_bytes()
     real_txt = (SAMPLES / "realistic" / "hdfc_delimited.txt").read_bytes()
     real_xls = (SAMPLES / "realistic" / "hdfc_netbanking.xls").read_bytes()
+    hdfc_pdf = (SAMPLES / "realistic" / "hdfc_netbanking.pdf").read_bytes()
+    locked_pdf = (SAMPLES / "realistic" / "sbi_account_statement_locked.pdf").read_bytes()
+    pdf_rows = pdftable.pdf_rows(hdfc_pdf).as_csv()  # what the page sends after reading a PDF
+    layout = lambda name: (SAMPLES / "pdf_layouts" / name).read_bytes()
     demo = (SAMPLES / "demo_statement.csv").read_text(encoding="utf-8-sig")
     up = lambda data, name, **kw: {"file": base64.b64encode(data).decode(), "filename": name,
                                    "as_of": "2026-04-30", **kw}
@@ -181,6 +211,20 @@ def _requests():
         ("POST", "/api/statement", look(real_txt, "hdfc_delimited.txt")),
         ("POST", "/api/audit", {**up(real_txt, "hdfc_delimited.txt"), "as_of": "2026-09-01"}),
         ("POST", "/api/audit", {**up(real_xls, "hdfc_netbanking.xls"), "as_of": "2026-09-01"}),
+        # PDFs: read, locked and opened, their rows handed back, and refused
+        ("POST", "/api/statement", look(hdfc_pdf, "hdfc_netbanking.pdf")),
+        ("POST", "/api/statement", look(locked_pdf, "sbi_account_statement.pdf")),
+        ("POST", "/api/statement", {**look(locked_pdf, "sbi_account_statement.pdf"),
+                                    "password": "54321"}),
+        ("POST", "/api/statement", {**look(locked_pdf, "sbi_account_statement.pdf"),
+                                    "password": "54321150690"}),
+        ("POST", "/api/audit", {**up(hdfc_pdf, "hdfc_netbanking.pdf"), "as_of": "2026-09-01"}),
+        ("POST", "/api/audit", {**up(pdf_rows, "hdfc_netbanking.pdf"), "as_of": "2026-09-01"}),
+        ("POST", "/api/complaint", {**up(pdf_rows, "hdfc_netbanking.pdf"), "as_of": "2026-09-01",
+                                    **claim}),
+        ("POST", "/api/statement", look(layout("hdfc_amount_misprinted.pdf"), "misprinted.pdf")),
+        ("POST", "/api/statement", look(layout("scanned.pdf"), "scanned.pdf")),
+        ("POST", "/api/statement", look(layout("other_bank.pdf"), "other_bank.pdf")),
         ("POST", "/api/complaint", {**up(sbi, "sbi_statement.xlsx", confirmed_rows=[5, 8],
                                          pairs=[[3, 6]]), "as_of": "2026-09-01", **claim}),
         ("POST", "/api/audit", {"csv": demo, "confirmed": ["444363915096"], "as_of": "2026-07-24"}),
@@ -205,18 +249,35 @@ def _requests():
 
 @pytest.fixture(scope="module")
 def engine_dir(tmp_path_factory):
-    """The demo's engine as the browser unpacks it: its own files, nothing else."""
+    """The demo's engine as the browser unpacks it: its own files, and the
+    PDF reader it loads when a PDF is chosen, nothing else."""
     d = tmp_path_factory.mktemp("engine")
-    for p in [*bd.PACKAGES, "engine.zip"]:
+    for p in [*bd.PACKAGES, "engine.zip", bd.PDF_READER[0], *bd.pyodide_wheels(bd.READ_PDF)]:
         zipfile.ZipFile(DOCS / p).extractall(d)
     return d
 
 
-def test_the_demo_engine_answers_every_request_as_the_app_does(engine_dir):
+@pytest.fixture(scope="module")
+def host_crypto(tmp_path_factory):
+    """The one part the check can't take from the demo: cryptography is
+    compiled, and the demo's build of it is for the browser (WebAssembly).
+    This machine's own build of it stands in, and only it."""
+    import cffi
+    import cryptography
+    d = tmp_path_factory.mktemp("crypto")
+    for module in (cryptography, cffi):
+        shutil.copytree(Path(module.__file__).parent, d / module.__name__)
+    import _cffi_backend
+    shutil.copy(_cffi_backend.__file__, d)
+    return d
+
+
+def test_the_demo_engine_answers_every_request_as_the_app_does(engine_dir, host_crypto):
     requests = _requests()
-    # -I -S: no installed packages at all, so FastAPI, pydantic, PyYAML and the
-    # spreadsheet readers can only come from what the demo ships
-    run = subprocess.run([sys.executable, "-I", "-S", "-c", DRIVER, str(engine_dir)],
+    # -I -S: no installed packages at all, so FastAPI, pydantic, PyYAML, the
+    # spreadsheet readers and the PDF reader can only come from what the demo ships
+    run = subprocess.run([sys.executable, "-I", "-S", "-c", DRIVER, str(engine_dir),
+                          str(host_crypto)],
                          input=json.dumps(requests), capture_output=True, text=True)
     assert run.returncode == 0, run.stderr[-2000:]
     client = TestClient(app)

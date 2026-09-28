@@ -50,14 +50,17 @@ Read this first every session ("start day" ritual). Full plan:
    walkthrough; repo pinned, MIT licensed, topics + homepage set, v0.9.5 released
 5. **Statement-download helper** — per-bank export guide (UX-SPEC screen 1) ⬅ NEXT
 
-Deferred post-v1.0: Hindi/Telugu UI, packaged .exe, SMS parsing, PDF statements,
+Deferred post-v1.0: Hindi/Telugu UI, packaged .exe, SMS parsing,
 per-bank grievance addresses, a native mobile app (the live page itself already runs
 on phones: verified at a 390px width in Chromium, Firefox and WebKit).
 
 ## Next phases (see plan for detail)
 
 - **Phase 1** — statement ingestion: canonical txn schema, CSV parsers (SBI/HDFC/ICICI/Kotak),
-  PDF via pdfplumber, synthetic statement generator
+  PDF via pdfplumber, synthetic statement generator. *Done for SBI and HDFC 2026-09-27
+  (D18): PDFs are read with pdfminer.six, which is pure Python and so also runs in the
+  live page (pdfplumber needs PDFium, a compiled library the browser runtime doesn't
+  ship). Synthetically tested only; a real SBI and HDFC PDF are the proof still owed.*
 - **Phase 2** — reconciliation engine (UTR/RRN matching + heuristics) + accuracy harness
 - **Phase 3** — audit report ("your bank owes you ₹X")
 - **Phase 4** — complaint pack generator + escalation deadline tracker

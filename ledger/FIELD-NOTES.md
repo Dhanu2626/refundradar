@@ -276,3 +276,35 @@ security policy, not by a promise — and I verified it in three browser engines
 **Next:** a real HDFC export and a real SBI file through the strict readers (the
 only proof left for either), the per-bank statement-download helper, and PDF
 statements, which are what many banking apps hand out.
+
+## Day 11, later — 2026-09-27 · PDF statements
+
+SBI's and HDFC's PDF statements are read now, in the local app, the CLI and the live
+page, locked ones included: the page rebuilds the bank's own table from where each
+character sits on the page, then hands the rows to the same strict readers as a
+spreadsheet, running balance included. No real bank PDF has been read yet; every PDF
+behind this is synthetic, drawn the way the banks' are as far as known.
+
+🏦 **Payments/RegTech insight:** the PDF is the statement most people actually have:
+the monthly e-statement arrives as a locked PDF in their inbox, and a bank's
+netbanking offers a PDF before it offers Excel. A refund audit that only reads
+spreadsheets sends its users off to find an export first; one that reads the PDF
+meets them where the statement already is.
+
+🔧 **Engineering insight:** a PDF has no table in it, only characters at positions,
+so reading one is rebuilding the table: the columns from the gaps no transaction's
+text crosses, the rows from the dates, and the wrapped lines back into their cells.
+The trap is text the balance check can't see. A PDF doesn't say whether a line broke
+at a space or inside a word, and a wrong guess splits a 12-digit reference; so the
+join reasons like the report writer (a line that reached the column's edge broke
+inside a word), and 25 synthetic PDFs pin what it does: the banks' layouts, 13 other
+drawings of them, and 9 it must refuse. Where it can't be sure which transaction a line belongs to, it stops.
+
+🎯 **Interview line:** "Statement PDFs have no table, only positioned characters. I
+rebuilt the table from geometry and then read it with the same strict parser the
+spreadsheets use, so a misplaced amount still breaks the bank's running balance and
+stops the audit — and I drew the statements thirteen other ways, and nine ways it must
+refuse, to prove it, while saying plainly that no real bank PDF has been through it yet."
+
+**Next:** a real SBI and HDFC PDF through the reader (the proof still owed), then the
+per-bank statement-download helper.

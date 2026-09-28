@@ -505,13 +505,13 @@
         <p class="or">or</p>
         <button type="button" class="primary choose"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Upload bank statement</button>
         <ul class="banks" aria-label="Statements RefundRadar reads">
-          <li><b>SBI</b><span>Excel (.xlsx, .xls) or CSV, including the password-protected download</span></li>
-          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV or the Delimited .txt &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
+          <li><b>SBI</b><span>Excel (.xlsx, .xls), CSV or PDF, password-protected too &middot; PDF reading synthetically tested, not yet verified against a real SBI PDF</span></li>
+          <li><b>HDFC</b><span>Excel (.xls, .xlsx), CSV, the Delimited .txt or PDF &middot; synthetically tested, not yet verified against a real HDFC export</span></li>
         </ul>
         <p class="note">Also reads a CSV with the columns Date, Narration, Ref, Debit, Credit, Balance.
-          Other banks and PDF statements aren't supported yet.</p>
+          Other banks, and scanned or photographed statements, aren't supported.</p>
       </div>
-      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt" hidden>
+      <input type="file" id="file" accept=".csv,.xls,.xlsx,.txt,.pdf" hidden>
       <div class="status" id="status" role="status" aria-live="polite"></div>
       <p class="private"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Your statement is read on this device and never leaves it.</p>
       <p class="sample">Don't have a statement?
@@ -536,8 +536,8 @@
         <div class="field"><label for="pw">Statement password</label>
           <input type="password" id="pw" autocomplete="off" spellcheck="false"></div>
         <p class="field-error hidden" id="pw-error" role="alert"></p>
-        <p class="hint">Your bank's statement download page shows the password format. It is not
-          your login password.</p>
+        <p class="hint">Your bank's download page, or the email the statement came with, says how
+          the password is made. It is not your login password.</p>
         <div class="row">
           <button type="button" class="primary" id="unlock-btn"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Open statement</button>
           <button type="button" class="ghost again">Choose a different file</button>
@@ -728,7 +728,7 @@ function showDetected(s, fileName) {
   $("unlock-card").classList.add("hidden");
   $("detected-card").classList.remove("hidden");
   $("det-bank").textContent = s.bank === "generic" ? "None named (generic CSV)" : s.bank;
-  $("det-type").textContent = s.file_type + (s.unlocked_file ? ", opened with your password" : "");
+  $("det-type").textContent = s.file_type + (s.password_used ? ", opened with your password" : "");
   $("det-count").textContent = `${s.transactions} (${s.payments} out, ${s.credits} in)`;
   $("det-period").textContent = s.first ? `${day(s.first)} – ${day(s.last)}` : "–";
   $("det-verify").textContent = s.verification;

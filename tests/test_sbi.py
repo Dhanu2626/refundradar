@@ -305,7 +305,7 @@ def test_cli_says_a_wrong_password_is_wrong(tmp_path, capsys):
 def test_a_pdf_is_named_as_a_pdf():
     from refundradar.parser import parse_statement_bytes
     assert sniff(b"%PDF-1.7\n") == "pdf"
-    with pytest.raises(ValueError, match="^This is a PDF"):
+    with pytest.raises(ValueError, match="^This PDF is damaged or incomplete"):
         parse_statement_bytes(b"%PDF-1.7\n1 0 obj\n")
 
 

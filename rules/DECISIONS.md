@@ -377,3 +377,77 @@ password crosses to the local server (127.0.0.1) or stays in the page (live demo
 is never logged or returned. A browser that can't run Pyodide's cryptography can't
 open a locked file in the live demo; it is told to save the file unprotected from
 Excel or run RefundRadar on the computer.
+
+## D18 — A statement PDF is read by rebuilding the bank's own table, then read strictly (2026-09-27)
+
+**Decision:** SBI's and HDFC's PDF statements are read. refundradar/pdftable.py takes every
+visible, upright character pdfminer.six finds, locates the bank's own table heading (the
+column names the spreadsheet readers match, a heading wrapped over two or three lines
+included), sets each column boundary in the gap that no character of the transactions'
+own lines crosses, and puts each transaction's lines back into one row: a date under the
+date heading starts a row; the lines under it, as close as a wrapped cell's lines are to
+each other, finish it. The rows then go through the same strict SBI and HDFC readers as a
+spreadsheet (D10, D16), running balance included; a refusal names the page and row
+("Page 2, row 7") instead of a row number the PDF doesn't show. A password-protected PDF
+asks for its password as the locked Excel file does (D17). The web app hands back the
+rows it read, as CSV under a fixed first line, so later steps need neither the PDF nor
+its password, and still say the statement came from a PDF. In the live demo, pdfminer.six
+(its PyPI wheel without pdfminer/cmap/, 8 MB of Chinese, Japanese and Korean font tables,
+then pinned) and Pyodide's charset-normalizer are fetched only when a PDF is chosen:
+about 3 MB with cryptography, which it imports.
+
+Refused, never guessed: a scan or photo (no visible text; a scanner's invisible
+machine-read text is ignored, since it can misread an amount); text drawn as codes (fonts
+that don't say which letters they draw); a damaged file; a table that isn't SBI's or
+HDFC's; a line of text between two transactions that belongs to neither; a description
+that starts below its date (cells centred or bottom-aligned in their row, which would
+shift lines into the wrong transaction); a word cut by a column edge; a later page whose
+heading names other columns; a dated row with an amount after HDFC's STATEMENT SUMMARY;
+and every row the spreadsheet readers refuse. Lines with no letter or figure (rules of
+asterisks or dashes) are passed over, as the spreadsheet readers pass them over.
+
+**Why:** every bank offers a PDF, and for many people it is what they have: the monthly
+e-statement is a locked PDF. Text pulled out of a PDF loses the table, and guessing it
+back would reopen the silent failure D10 closed. Rebuilding the table and then reading it
+with the unchanged spreadsheet readers keeps one set of rules and one safety net: an
+amount read into the wrong column, a row missed or read twice, breaks the running balance
+and stops the audit.
+
+**Where a line broke:** a PDF doesn't record whether a wrapped cell broke at a space or
+inside a word, and a wrong guess can split a 12-digit reference in two. The join assumes
+what report writers do, breaking at spaces and inside a word only when the word is longer
+than a line: a line that stopped short of the column's edge by more than the next
+character broke at a space, and so did one with a space on it; a line that reached the
+edge broke inside a word, unless joining would swallow a reference ("CHARGES" then
+"616012345603"); nothing is added after a word ending in a hyphen or slash. A column
+whose lines all run to the edge was broken anywhere and is joined as it is. Either way a
+space that fell exactly on a break can be lost, and "SAMPLE FRIEND" reads "SAMPLEFRIEND".
+
+**Evidence status:**
+- *Synthetic only.* samples/realistic/ holds HDFC's and SBI's statements drawn as PDFs the
+  way the banks' own are, as far as known (HDFC: page head on every page, customer block,
+  a table without rules, STATEMENT SUMMARY, footer; SBI: account block, a ruled grid,
+  dates written 1 Jun 2026 in a column narrow enough to wrap, locked with AES-256). Every
+  transaction reads exactly as from their spreadsheet twins, every field.
+  samples/pdf_layouts/ draws the same statements the ways other report writers draw a
+  table: breaks after hyphens, breaks anywhere, a heading on page 1 only, rows split by a
+  page break, words drawn without space characters, Courier and Times, a heading drawn
+  twice as fake bold, newest first. Dates, amounts, balances, references and channels
+  read identically in all 13 of them; in 4, 1 to 4 narrations lost a space where a line
+  broke. The refusals above each have a synthetic PDF.
+  tests/test_pdf.py; the live demo in Chromium, Firefox and WebKit.
+- *Not verified:* any real SBI or HDFC PDF. None has been read. The layouts are as known,
+  not as seen: the column names, how dates and amounts are printed, whether a balance
+  carries Cr or Dr, how close the footer sits under the table, how the bank's report
+  writer wraps a cell.
+
+**Risk:** the first real PDF may be refused where the synthetic ones are read: a heading
+worded otherwise, a balance printed "1,234.56 Cr", a footer printed tight under the last
+row, a watermark drawn as text. That is the intended failure: the error names the page,
+and the fix belongs in pdftable.py or the readers, with a synthetic PDF drawn in that
+shape. What the balance check can't catch is text: a narration read into the wrong
+transaction, or a lost space, changes no amount, but the reconciler matches on references
+and wording. That is why a line that belongs to no transaction, and a row not read from
+its date down, stop the audit instead of being placed. The live demo's pdfminer has no
+CJK font tables: a PDF that needs them reads as codes and is refused there, where the app
+on the computer might read it.
